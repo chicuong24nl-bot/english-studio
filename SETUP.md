@@ -51,7 +51,7 @@ Database lưu hash của mã truy cập, không lưu mã gốc. Phiên đăng nh
 
 1. Import GitHub repository trong Vercel bằng **Add New → Project**.
 2. Chọn Framework Preset **Other**.
-3. Để trống Build Command và đặt Output Directory là `.`.
+3. Repo đã có `vercel.json` để dùng Framework Preset **Other**, bỏ Build Command và phục vụ thư mục gốc (Output Directory `.`). Nếu project có Root Directory tùy chỉnh, đặt lại thành `.` trong Project Settings.
 4. Deploy; không cần build step. Vercel phục vụ file tĩnh, còn Auth/database/RPC chạy trên Supabase.
 5. Mở domain Vercel và hoàn tất các bước trong phần B và C.
 
