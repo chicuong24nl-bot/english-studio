@@ -1,64 +1,65 @@
-# HRIS Study Studio — setup
+# English Studio — setup guide
 
-## Tính năng
+This app follows the supplied Stage 1 Reading & Writing material. It contains six English passages, their six-layer analysis, flashcards, MCQs, writing prompts, and a grammar reference based on the provided PDF. Practice has no attempt limit.
 
-- 7 chương HRIS được dựng từ file HTML mẫu; 6 bài đọc tiếng Anh không liên quan đã được bỏ qua.
-- Cổng sinh viên đăng nhập bằng mã riêng Admin cấp.
-- Cổng Teacher/Admin đăng nhập bằng Supabase Auth; database riêng xác định quyền Admin.
-- Study, Practice, flashcard, câu hỏi tự chấm kèm giải thích và ôn câu sai.
-- Tiến độ học được đồng bộ lên Supabase.
-- Thông tin MSSV, tên sinh viên và email Admin không được nhúng vào source public. Admin tạo hồ sơ sinh viên sau khi đăng nhập; database kiểm soát quyền truy cập.
+## 1. Run the website locally
 
-## A. Chạy website trên máy
+1. Install Node.js LTS.
+2. Open PowerShell in the project folder.
+3. Run `npm run dev`.
+4. Open `http://localhost:4173`.
+5. Stop the local server with `Ctrl+C`.
 
-1. Cài Node.js LTS.
-2. Mở PowerShell tại thư mục dự án.
-3. Chạy `npm run dev`.
-4. Mở `http://localhost:4173`.
-5. Dừng server bằng `Ctrl+C`.
+No `npm install` is required.
 
-Không cần chạy `npm install`.
+## 2. Install or update the Supabase schema
 
-## B. Cấu hình Supabase
+1. Open the Supabase project used by the site.
+2. Go to **SQL Editor → New query**.
+3. Open `supabase/schema.sql` from this project, copy the entire file into the query, then click **Run**.
+4. For an existing project where student code login shows `function digest(text, unknown) does not exist`, run `supabase/fix-student-login.sql` in a new SQL query. This updates the three existing RPC functions and keeps student data intact.
 
-1. Mở Supabase project của bạn.
-2. Vào **SQL Editor → New query**, dán toàn bộ `supabase/schema.sql` và nhấn **Run**.
-3. Vào **Authentication → Providers → Email** và tắt **Allow new users to sign up**.
-4. Vào **Authentication → Users → Add user** để tạo tài khoản Admin; đặt mật khẩu riêng trong Supabase.
-5. Trong danh sách Users, sao chép **UUID** của tài khoản vừa tạo.
-6. Chạy lệnh này trong SQL Editor, thay giá trị mẫu bằng UUID đó:
+Supabase installs `pgcrypto` in the `extensions` schema. The functions use a restricted `search_path`, so the fixed SQL explicitly calls `extensions.digest()` and `extensions.gen_random_bytes()`.
+
+## 3. Create the teacher account and grant access
+
+1. Go to **Authentication → Providers → Email** and turn off **Allow new users to sign up**.
+2. Go to **Authentication → Users → Add user**.
+3. Create the teacher using the intended teacher email and set a password. Keep the email/password and class roster in a private channel; do not add them to this public repository.
+4. Copy the user's **UID** from the Users list.
+5. In **SQL Editor**, run this statement after replacing the sample UUID:
 
    ```sql
    insert into public.hris_admins (user_id)
-   values ('PASTE-ADMIN-USER-UUID-HERE');
+   values ('PASTE-TEACHER-USER-UID-HERE');
    ```
 
-   Bảng quyền Admin bị khóa với trình duyệt. Chỉ SQL Editor/service role mới có thể cấp quyền.
-7. Kiểm tra `supabase-config.js` có Project URL và anon/public key. Chỉ dùng anon/public key ở website; tuyệt đối không đưa `service_role` key vào mã nguồn.
+If Supabase reports a duplicate key for `hris_admins_pkey`, that UID already has teacher access; do not insert it again.
 
-## C. Tạo roster và cấp mã
+## 4. Add five students and issue access codes
 
-1. Mở website, chọn **Teacher / Admin** và đăng nhập bằng tài khoản đã cấp quyền ở bước B.
-2. Vào **Quản lý lớp học → Quản lý sinh viên**.
-3. Nhập MSSV và họ tên của từng sinh viên rồi bấm **Thêm vào lớp**. Thực hiện cho 5 sinh viên.
-4. Bấm **Cấp mã** bên cạnh từng hồ sơ. Mã chỉ hiện một lần; gửi riêng mã đó cho đúng sinh viên.
-5. Nếu mã bị lộ, bấm **Đổi mã** để thu hồi mã cũ và tạo mã mới.
-6. Sinh viên chọn **Cổng sinh viên**, nhập mã để đăng nhập.
+1. Open the site, choose **Teacher**, and sign in with the teacher email and password.
+2. Select **Manage students**.
+3. Add each student's ID and display name from your private class roster. Personal roster details are deliberately not stored in this public repository.
 
-Database lưu hash của mã truy cập, không lưu mã gốc. Phiên đăng nhập và tiến độ được gắn với hồ sơ sinh viên.
+   Add all five student records individually in the teacher dashboard.
 
-## D. Deploy public trên Vercel
+4. Click **Issue code** beside each student. Copy the `ENG-...` code and send it privately to that student. The code is displayed once.
+5. Students choose **Student** and sign in with the access code. Their Student ID is a roster identifier, not the login code.
+6. If a code is exposed, click **Replace code**. The old code and its active session are revoked.
 
-1. Import GitHub repository trong Vercel bằng **Add New → Project**.
-2. Chọn Framework Preset **Other**.
-3. Repo đã có `vercel.json` để dùng Framework Preset **Other**, bỏ Build Command và phục vụ thư mục gốc (Output Directory `.`). Nếu project có Root Directory tùy chỉnh, đặt lại thành `.` trong Project Settings.
-4. Deploy; không cần build step. Vercel phục vụ file tĩnh, còn Auth/database/RPC chạy trên Supabase.
-5. Mở domain Vercel và hoàn tất các bước trong phần B và C.
+## 5. Data and access notes
 
-## Bảo mật và giới hạn
+- Student reading progress, quiz results, missed questions, card reviews, and writing drafts are saved through Supabase RPC functions.
+- RLS restricts roster and progress reads to the teacher. Student code login and progress RPCs validate a server-side session token.
+- Public sign-up stays disabled. Teacher access is granted by UID in `hris_admins`.
+- The browser uses only the Supabase publishable key in `supabase-config.js`. Never put a Supabase secret or service-role key in this project.
+- This is a practice app: answers and explanations are shown after a learner chooses an option. Do not use its client-side question bank as a secure high-stakes exam.
 
-- Tắt public sign-up; chỉ cấp quyền Admin bằng UUID trong bảng `hris_admins`.
-- RLS ngăn người chưa xác thực xem roster. RPC kiểm tra quyền Admin trước khi tạo hồ sơ hoặc cấp mã.
-- Mã sinh viên là thông tin đăng nhập cá nhân; gửi riêng và đổi ngay khi bị lộ.
-- Bài tập là dạng tự ôn nên đáp án được trả ngay sau khi chọn. Không dùng như bài thi cần giữ bí mật đáp án.
-- File HRIS gốc chứa nội dung học tập trong HTML. SQL chỉ lưu tài khoản lớp, session và tiến độ.
+## 6. Deploy to Vercel
+
+1. Push the project to the connected GitHub repository.
+2. In Vercel, import the repository and use the **Other** framework preset.
+3. Serve the repository root; no build command is needed for this static site.
+4. Wait for the deployment to finish, open the Vercel URL, and hard-refresh with `Ctrl+Shift+R`.
+5. Confirm `supabase-config.js` contains the right project URL and its publishable key. The key may be public; secret keys may not.

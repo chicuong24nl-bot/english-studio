@@ -1,13 +1,18 @@
-# HRIS Study Studio
+# English Studio — Stage 1
 
-Website học và ôn tập HRIS gồm 7 chương, dành cho 5 sinh viên và một Admin.
+English reading and writing practice for Stage 1 (B2 foundation), based on the supplied six-reading packet, IELTS analysis framework, and English grammar PDF.
 
-## Bắt đầu
+## Included
 
-- Cấu hình Supabase tại `supabase-config.js`.
-- Chạy `supabase/schema.sql` trong Supabase SQL Editor.
-- Tạo tài khoản Admin tại Supabase Authentication.
-- Chạy local với `npm run dev` rồi mở `http://localhost:4173`.
-- Hướng dẫn cấu hình database, cấp mã sinh viên và deploy Vercel nằm trong [SETUP.md](SETUP.md).
+- Six full English reading passages with six-layer analysis: outline, idea units, contextual vocabulary, sentence patterns, discourse/stance, and common traps.
+- 82 flashcards, 57 multiple-choice questions with answer explanations, and 12 writing prompts with the 10-point rubric.
+- Grammar reference topics extracted from the supplied grammar PDF.
+- Student access codes, teacher sign-in, Supabase progress sync, and unlimited practice attempts.
 
-Vercel: chọn Framework Preset **Other**, để trống Build Command và đặt Output Directory là `.`.
+## Run locally
+
+1. Install Node.js LTS.
+2. In this folder, run `npm run dev`.
+3. Open `http://localhost:4173`.
+
+See [SETUP.md](SETUP.md) for Supabase, teacher access, student roster, and Vercel deployment steps.

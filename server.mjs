@@ -9,4 +9,4 @@ createServer(async (req,res) => {
   if (!file.startsWith(root)) { res.writeHead(403).end('Forbidden'); return; }
   try { const body = await readFile(file); res.writeHead(200,{'Content-Type':types[extname(file)]||'application/octet-stream'});res.end(body); }
   catch { res.writeHead(404).end('Not found'); }
-}).listen(Number(process.env.PORT)||4173, () => console.log(`HRIS Study Studio: http://localhost:${Number(process.env.PORT)||4173}`));
+}).listen(Number(process.env.PORT)||4173, () => console.log(`English Studio: http://localhost:${Number(process.env.PORT)||4173}`));

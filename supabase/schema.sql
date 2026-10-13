@@ -1,4 +1,4 @@
--- HRIS Study Studio: student code login and synced learning progress.
+-- English Studio: student code sign-in and synced learning progress.
 -- Admins and student records are added privately after setup; no personal roster data is seeded here.
 create extension if not exists pgcrypto;
 
@@ -82,11 +82,11 @@ begin
     raise exception 'Invalid access code';
   end if;
   select * into v_student from public.student_accounts
-    where access_code_hash=encode(digest(upper(trim(p_code)),'sha256'),'hex') and active;
+    where access_code_hash=encode(extensions.digest(upper(trim(p_code)),'sha256'),'hex') and active;
   if not found then raise exception 'Invalid access code'; end if;
-  v_token := encode(gen_random_bytes(32),'hex');
+  v_token := encode(extensions.gen_random_bytes(32),'hex');
   insert into public.student_sessions(token_hash,student_no,expires_at)
-    values(encode(digest(v_token,'sha256'),'hex'),v_student.student_no,now()+interval '30 days');
+    values(encode(extensions.digest(v_token,'sha256'),'hex'),v_student.student_no,now()+interval '30 days');
   return jsonb_build_object('student_no',v_student.student_no,'display_name',v_student.display_name,'session_token',v_token);
 end; $$;
 
@@ -96,7 +96,7 @@ declare v_student_no text; v_progress jsonb;
 begin
   select s.student_no into v_student_no from public.student_sessions s
     join public.student_accounts a on a.student_no=s.student_no
-    where s.token_hash=encode(digest(coalesce(p_session_token,''),'sha256'),'hex')
+    where s.token_hash=encode(extensions.digest(coalesce(p_session_token,''),'sha256'),'hex')
       and s.expires_at>now() and a.active;
   if v_student_no is null then raise exception 'Session expired. Sign in again.'; end if;
   select progress into v_progress from public.student_progress where student_no=v_student_no;
@@ -109,7 +109,7 @@ declare v_student_no text;
 begin
   select s.student_no into v_student_no from public.student_sessions s
     join public.student_accounts a on a.student_no=s.student_no
-    where s.token_hash=encode(digest(coalesce(p_session_token,''),'sha256'),'hex')
+    where s.token_hash=encode(extensions.digest(coalesce(p_session_token,''),'sha256'),'hex')
       and s.expires_at>now() and a.active;
   if v_student_no is null then raise exception 'Session expired. Sign in again.'; end if;
   if octet_length(coalesce(p_payload,'{}'::jsonb)::text)>1000000 then raise exception 'Progress payload is too large'; end if;
