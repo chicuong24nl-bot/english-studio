@@ -18,6 +18,7 @@ No `npm install` is required.
 2. Go to **SQL Editor → New query**.
 3. Open `supabase/schema.sql` from this project, copy the entire file into the query, then click **Run**.
 4. For an existing project where student code login shows `function digest(text, unknown) does not exist`, run `supabase/fix-student-login.sql` in a new SQL query. This updates the three existing RPC functions and keeps student data intact.
+5. Run `supabase/manage-student-records.sql` in a new query to enable teacher-side editing, activation/deactivation, and deletion of student records. This migration keeps existing students and progress.
 
 Supabase installs `pgcrypto` in the `extensions` schema. The functions use a restricted `search_path`, so the fixed SQL explicitly calls `extensions.digest()` and `extensions.gen_random_bytes()`.
 
@@ -40,9 +41,9 @@ If Supabase reports a duplicate key for `hris_admins_pkey`, that UID already has
 
 1. Open the site, choose **Teacher**, and sign in with the teacher email and password.
 2. Select **Manage students**.
-3. Add each student's ID and display name from your private class roster. Personal roster details are deliberately not stored in this public repository.
+3. Open **Manage student records**. Add each student's ID and display name from your private class roster. Personal roster details are deliberately not stored in this public repository.
 
-   Add all five student records individually in the teacher dashboard.
+   Add all five student records individually in the teacher dashboard. Each record shows reading completion, practice rounds, answer accuracy, and the last progress sync. Use **Edit name**, **Deactivate/Reactivate**, and **Delete record** to manage it. Deactivating immediately revokes the student's active session; deleting permanently removes the record and cascades to its progress and sessions.
 
 4. Click **Issue code** beside each student. Copy the `ENG-...` code and send it privately to that student. The code is displayed once.
 5. Students choose **Student** and sign in with the access code. Their Student ID is a roster identifier, not the login code.

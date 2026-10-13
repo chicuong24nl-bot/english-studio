@@ -5,7 +5,9 @@ English reading and writing practice for Stage 1 (B2 foundation), based on the s
 ## Included
 
 - Six full English reading passages with six-layer analysis: outline, idea units, contextual vocabulary, sentence patterns, discourse/stance, and common traps.
-- 82 flashcards, 57 multiple-choice questions with answer explanations, and 12 writing prompts with the 10-point rubric.
+- 82 clickable flashcards, 57 multiple-choice questions with answer explanations, and 12 writing prompts with autosaved drafts.
+- Teacher dashboard for student record editing, active status, code management, and learning progress summaries.
+- Adjustable quiz length, display themes, font size, accent colours, and interface styles.
 - Grammar reference topics extracted from the supplied grammar PDF.
 - Student access codes, teacher sign-in, Supabase progress sync, and unlimited practice attempts.
 
