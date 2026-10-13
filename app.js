@@ -4,14 +4,18 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=s=>esc(s).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
 const S={page:'home',lesson:0,section:'reading',scope:'all',practiceType:'',qCount:10,quiz:[],qi:0,selected:null,score:0,wrong:[],done:false,cards:[],ci:0,revealed:false,writingIndex:0,grammarGroup:1,pop:false};
-const DEFSET={theme:'auto',size:17,accent:'#159688',style:'editorial'};
-const ACCENTS=[['#159688','Teal'],['#1f4e9c','Blue'],['#b4432a','Terracotta'],['#6b3fa0','Purple'],['#c27a00','Amber'],['#2b2b2b','Charcoal']];
+const DEFSET={theme:'auto',size:17,accent:'#18a999',style:'editorial'};
+const ACCENTS=[['#18a999','Teal'],['#4b82d3','Blue'],['#d45c42','Terracotta'],['#9b73e8','Purple'],['#d99000','Amber'],['#59616e','Slate']];
 const STYLES=[['editorial','Editorial'],['flat','Flat'],['glass','Glass'],['neu','Soft'],['brutal','Bold'],['clay','Rounded'],['minimal','Minimal'],['retro','Retro']];
 let settings=Object.assign({},DEFSET,readLocal('english-settings',{}));
 function readLocal(key,fallback){try{return JSON.parse(localStorage.getItem(key)||JSON.stringify(fallback))}catch{return fallback}}
 function writeLocal(key,value){try{localStorage.setItem(key,JSON.stringify(value))}catch{}}
 function emptyStudentProgress(){return {readLessons:[],lastLesson:1,totalAnswers:0,correctAnswers:0,practiceCount:0,wrongQuestions:[],quizHistory:[],flashcardsReviewed:{},writingDrafts:{},writingScores:{},updatedAt:null}}
-function applySettings(){const root=document.documentElement;if(settings.theme==='auto')delete root.dataset.theme;else root.dataset.theme=settings.theme;root.dataset.style=settings.style||'editorial';root.style.fontSize=settings.size+'px';root.style.setProperty('--teal',settings.accent);writeLocal('english-settings',settings)}
+function colorRgb(hex){const value=String(hex||'').replace('#','');if(!/^[\da-f]{6}$/i.test(value))return [24,169,153];return [0,2,4].map(i=>parseInt(value.slice(i*2,i*2+2),16))}
+function colorLum(rgb){const linear=rgb.map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4});return .2126*linear[0]+.7152*linear[1]+.0722*linear[2]}
+function adjustedColor(hex,direction,amount){const rgb=colorRgb(hex).map(v=>Math.round(direction==='lighten'?v+(255-v)*amount:v*(1-amount)));return '#'+rgb.map(v=>v.toString(16).padStart(2,'0')).join('')}
+function contrastRatio(a,b){const x=colorLum(colorRgb(a)),y=colorLum(colorRgb(b));return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)}
+function applySettings(){const root=document.documentElement,legacy={'#159688':'#18a999','#1f4e9c':'#4b82d3','#b4432a':'#d45c42','#6b3fa0':'#9b73e8','#c27a00':'#d99000','#2b2b2b':'#59616e'};settings.accent=legacy[String(settings.accent).toLowerCase()]||settings.accent;const systemLight=window.matchMedia?.('(prefers-color-scheme: light)').matches,light=settings.theme==='light'||(settings.theme==='auto'&&systemLight),surface=light?'#fbfcff':'#18232d';let ink=settings.accent;for(let i=0;i<18&&contrastRatio(ink,surface)<4.5;i++)ink=adjustedColor(ink,light?'darken':'lighten',.12);const whiteContrast=contrastRatio('#ffffff',settings.accent),darkContrast=contrastRatio('#15212a',settings.accent),onAccent=whiteContrast>darkContrast?'#ffffff':'#15212a';if(settings.theme==='auto')delete root.dataset.theme;else root.dataset.theme=settings.theme;root.dataset.style=settings.style||'editorial';root.style.fontSize=settings.size+'px';root.style.setProperty('--teal',settings.accent);root.style.setProperty('--accent-ink',ink);root.style.setProperty('--accent-on',onAccent);writeLocal('english-settings',settings)}
 function go(page){S.page=page;S.pop=false;render();window.scrollTo(0,0)}
 function back(){if(S.page==='lesson'){go('study');return}if(S.page==='cards'||S.page==='quiz'||S.page==='writing'){go('practice');return}if(S.page==='grammar-topic'){go('grammar');return}go('home')}
 function lesson(){return LESSONS[S.lesson]||LESSONS[0]}
