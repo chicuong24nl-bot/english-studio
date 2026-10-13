@@ -15,7 +15,7 @@ async function supaRequest(path,{method='GET',body,token}={}){
  if(!response.ok)throw Error(data?.message||data?.msg||data?.error_description||`Supabase error ${response.status}`);
  return data;
 }
-async function supaLogin(email,password){const data=await supaRequest('auth/v1/token?grant_type=password',{method:'POST',body:{email,password},token:SUPA.anonKey});localStorage.setItem(SUPA_SESSION_KEY,JSON.stringify(data));return data}
+async function supaLogin(email,password){const data=await supaRequest('auth/v1/token?grant_type=password',{method:'POST',body:{email,password}});localStorage.setItem(SUPA_SESSION_KEY,JSON.stringify(data));return data}
 function supaLogout(){localStorage.removeItem(SUPA_SESSION_KEY)}
 const supaRpc=(name,args)=>supaRequest(`rest/v1/rpc/${name}`,{method:'POST',body:args});
 async function supaSelect(table,query='*'){return supaRequest(`rest/v1/${table}?select=${encodeURIComponent(query)}`)}
