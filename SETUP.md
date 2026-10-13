@@ -18,7 +18,7 @@ No `npm install` is required.
 2. Go to **SQL Editor → New query**.
 3. Open `supabase/schema.sql` from this project, copy the entire file into the query, then click **Run**.
 4. For an existing project where student code login shows `function digest(text, unknown) does not exist`, run `supabase/fix-student-login.sql` in a new SQL query. This updates the three existing RPC functions and keeps student data intact.
-5. Run `supabase/manage-student-records.sql` in a new query to enable teacher-side editing, activation/deactivation, and deletion of student records. This migration keeps existing students and progress.
+5. Run (or re-run after an app update) `supabase/manage-student-records.sql` in a new query to enable teacher-side editing, activation/deactivation, and deletion of student records. Deletion explicitly removes a student's sessions and progress before the roster row, including on databases where the older foreign keys do not cascade.
 
 Supabase installs `pgcrypto` in the `extensions` schema. The functions use a restricted `search_path`, so the fixed SQL explicitly calls `extensions.digest()` and `extensions.gen_random_bytes()`.
 

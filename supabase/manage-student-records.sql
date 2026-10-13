@@ -25,6 +25,9 @@ create or replace function public.admin_delete_student(p_student_no text)
 returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   if not public.hris_is_admin() then raise exception 'Teacher access required'; end if;
+  -- Delete dependants explicitly so removal also works if older tables lack ON DELETE CASCADE.
+  delete from public.student_sessions where student_no=p_student_no;
+  delete from public.student_progress where student_no=p_student_no;
   delete from public.student_accounts where student_no=p_student_no;
   if not found then raise exception 'Student record not found'; end if;
   return jsonb_build_object('deleted',true,'student_no',p_student_no);
