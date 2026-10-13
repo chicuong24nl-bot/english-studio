@@ -43,9 +43,9 @@ function grammarText(text){
   const source=String(text||'').replace(/\s+/g,' ').trim();if(!source)return '';
   const marked=source
     .replace(/\s*([●•○])\s*/g,'\n@@BULLET@@')
-    .replace(/\s*(\(\s*[+−-]\s*\)|\(\s*\?\s*\))\s*/g,'\n@@FORMULA@@$1 ')
-    .replace(/\s+(Cấu trúc(?:\s+với\s+động\s+từ\s+[^:]{1,35})?|Cách dùng|Lưu ý|Ví dụ|Trường hợp(?:\s+\d+)?):?\s*/gi,'\n@@HEADING@@$1\n')
-    .replace(/^(Cấu trúc(?:\s+với\s+động\s+từ\s+[^:]{1,35})?|Cách dùng|Lưu ý|Ví dụ|Trường hợp(?:\s+\d+)?):?\s*/i,'@@HEADING@@$1\n');
+    .replace(/\s*(\(\+\)|\(-\)|\(\?\))\s*/g,'\n@@FORMULA@@$1 ')
+    .replace(/\s+(Cấu trúc\s+với\s+động\s+từ\s+(?:thường|[“"']?tobe[”"']?)|Cấu trúc|Cách dùng|Lưu ý|Ví dụ|Trường hợp(?:\s+\d+)?):?\s*/gi,'\n@@HEADING@@$1\n')
+    .replace(/^(Cấu trúc\s+với\s+động\s+từ\s+(?:thường|[“"']?tobe[”"']?)|Cấu trúc|Cách dùng|Lưu ý|Ví dụ|Trường hợp(?:\s+\d+)?):?\s*/i,'@@HEADING@@$1\n');
   const tokens=marked.split(/\n/).map(x=>x.trim()).filter(Boolean),out=[];let bullets=[];
   const flush=()=>{if(bullets.length){out.push(`<ul class="grammar-points">${bullets.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`);bullets=[]}};
   for(const token of tokens){
