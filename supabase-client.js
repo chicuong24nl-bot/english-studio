@@ -4,7 +4,11 @@ function supaSession(){try{return JSON.parse(localStorage.getItem(SUPA_SESSION_K
 function supaConfigured(){return Boolean(SUPA.url&&SUPA.anonKey)}
 async function supaRequest(path,{method='GET',body,token}={}){
  if(!supaConfigured())throw Error('Supabase chưa được cấu hình: thêm anon/public key trong supabase-config.js.');
- const headers={'apikey':SUPA.anonKey,'Authorization':`Bearer ${token||supaSession()?.access_token||SUPA.anonKey}`,'Content-Type':'application/json'};
+ const headers={'apikey':SUPA.anonKey,'Content-Type':'application/json'};
+ // Publishable keys (sb_publishable_...) are API keys, not JWTs; send them only
+ // in apikey. Legacy anon keys are JWTs and remain valid in Authorization.
+ const bearer=token||supaSession()?.access_token||(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(SUPA.anonKey)?SUPA.anonKey:null);
+ if(bearer)headers.Authorization=`Bearer ${bearer}`;
  if(method==='POST'||method==='PATCH'||method==='DELETE')headers.Prefer='return=representation';
  const response=await fetch(`${SUPA.url.replace(/\/$/,'')}/${path}`,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
  const data=await response.json().catch(()=>null);
