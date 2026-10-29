@@ -21,6 +21,12 @@ Vercel's Git integration creates deployments from connected GitHub repositories 
 
 The demo currently uses browser storage for teacher and student data. Before inviting students, replace that storage path with a shared database and authenticated teacher/student access, then deploy that production workflow. The project includes Clerk/Neon environment-variable placeholders in `.env.example`; real keys and a Neon connection string must be created in those services and added as encrypted Vercel project environment variables. Never put secret values in source files, commits, screenshots, or chat.
 
+### Teacher sign-in for the demo
+
+The `/demo` teacher workspace can be gated with a single shared teacher password. In Vercel, add `LIBRARIA_TEACHER_PASSWORD` and `LIBRARIA_TEACHER_SESSION_SECRET` as encrypted environment variables, then redeploy. Use a long unique password and generate the session secret with `openssl rand -hex 32`. The teacher session uses an HTTP-only, same-site cookie and expires after 12 hours. If these variables are missing, teacher sign-in stays locked.
+
+The demo still saves materials and classroom data in each browser's local storage. The sign-in gate protects the teacher interface from casual access, but it does not turn browser storage into a shared or server-secured database. For real student accounts and cross-device material access, complete the authenticated database setup above before inviting a class.
+
 Stripe variables are only needed if you enable billing. Review the database schema and migration workflow before touching a production database; do not run the destructive seed script against real student data.
 
 ## Local check before publishing

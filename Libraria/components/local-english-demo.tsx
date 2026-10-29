@@ -8,6 +8,7 @@ import { readingVocabularyDecks } from "@/content/reading-flashcards";
 import { getReadingParagraphs, readingTests, type IELTSQuestionType, type ReadingFlashcard, type ReadingPassage, type ReadingQuestion, type ReadingTest } from "@/content/reading-tests";
 import { CUSTOM_TESTS_STORAGE_KEY, createLocalId, createStudentJoinCode, DEFAULT_STUDENT_ID, EXAMS_STORAGE_KEY, SELECTED_STUDENT_STORAGE_KEY, STUDENTS_STORAGE_KEY, TEACHING_POINTER_STORAGE_KEY, emptyStudentProgress, studentNotesKey, studentProgressKey, type ExamAssignment, type ReadingNote, type ReadingTestDraft, type StudentProfile, type StudentProgress, type TeachingPointer } from "@/lib/local-classroom";
 import { TeacherDashboard } from "@/components/teacher-dashboard";
+import { TeacherLoginGate } from "@/components/teacher-login-gate";
 
 const LEGACY_STORAGE_KEY = "english-reader-progress";
 const SETTINGS_KEY = "english-reader-settings";
@@ -414,6 +415,7 @@ export function LocalEnglishDemo() {
   const [assignments, setAssignments] = useState<ExamAssignment[]>([]);
   const [readingNotes, setReadingNotes] = useState<ReadingNote[]>([]);
   const [teacherMode, setTeacherMode] = useState(false);
+  const [teacherAuthenticated, setTeacherAuthenticated] = useState(false);
   const [teachingPointer, setTeachingPointer] = useState<TeachingPointer | null>(null);
   const teachingChannel = useRef<BroadcastChannel | null>(null);
   const [clockNow, setClockNow] = useState(Date.now());
@@ -421,6 +423,21 @@ export function LocalEnglishDemo() {
   const [headerVisible, setHeaderVisible] = useState(true);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "unread" | "saved" | "read">("all");
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/teacher-session", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() as Promise<{ authenticated?: boolean }> : null)
+      .then((session) => { if (active) setTeacherAuthenticated(session?.authenticated === true); })
+      .catch(() => { if (active) setTeacherAuthenticated(false); });
+    return () => { active = false; };
+  }, []);
+
+  const signOutTeacher = async () => {
+    try { await fetch("/api/teacher-session", { method: "DELETE" }); } catch { /* The session cookie expires if the request cannot reach the server. */ }
+    setTeacherAuthenticated(false);
+    setTeacherMode(false);
+  };
 
   useEffect(() => {
     const readPointer = (raw: string | null) => {
@@ -833,14 +850,14 @@ export function LocalEnglishDemo() {
           </div>
           {!teacherMode && <div className="flex items-center gap-2">
             {studentPage !== "home" && <span className="max-w-32 truncate px-2 text-sm font-semibold sm:max-w-48" title={selectedStudent?.name ?? "Student"}>{selectedStudent?.name ?? "Student"}</span>}
-            <button onClick={() => setTeacherMode(true)} className="inline-flex h-11 items-center gap-2 rounded-full border px-3 text-sm font-semibold transition hover:shadow-sm sm:px-4" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}><Users size={16} /><span className="hidden sm:inline">Teacher</span></button>
+            <button onClick={() => setTeacherMode(true)} className="inline-flex h-11 items-center gap-2 rounded-full border px-3 text-sm font-semibold transition hover:shadow-sm sm:px-4" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}><Users size={16} /><span className="hidden sm:inline">Teacher sign in</span></button>
             {Settings}
           </div>}
-          {teacherMode && <div className="flex items-center gap-2">{Settings}</div>}
+          {teacherMode && teacherAuthenticated && <div className="flex items-center gap-2">{Settings}</div>}
         </motion.header>
 
         <AnimatePresence mode="wait" initial={false}>
-    {teacherMode ? <TeacherDashboard key="teacher-dashboard" students={students} assignments={assignments} tests={allTests} theme={classroomTheme} onAddStudent={addStudent} onUpdateStudentCode={updateStudentCode} onToggleStudentPhase={toggleStudentPhase} onCreateAssignments={createAssignments} onCreateTest={createTeacherTest} onPublishMaterial={publishTeacherTest} onUnpublishMaterial={unpublishTeacherTest} onUpdateMaterial={(testId, updates) => { const next = allTests.map((item) => item.id === testId ? { ...item, ...updates } : item); setAllTests(next); localStorage.setItem(CUSTOM_TESTS_STORAGE_KEY, JSON.stringify(next.filter((item) => item.id.startsWith("custom-")))); }} onGradeAssignment={gradeAssignment} onTeachPointer={publishTeachingPointer} onBack={() => { publishTeachingPointer(null); setTeacherMode(false); }} /> : studentPage === "home" ? <StudentHomePage studentName={selectedStudent?.name ?? "Student"} theme={theme} code={studentCodeInput} error={studentCodeError} onCodeChange={(value) => { setStudentCodeInput(value); setStudentCodeError(""); }} onSubmit={joinStudentProfile} onContinue={() => setStudentPage("library")} /> : practiceSession ? <FlashcardPracticeView cards={practiceSession} theme={theme} onClose={() => { setPracticeSession(null); setPracticeStep("home"); }} /> : activeTest ? <ReadingTestView key={activeTest.id + (activeExamId ?? "")} test={activeTest} theme={theme} preferences={preferences} exam={activeExam} studentId={selectedStudentId} draft={activeExam ? undefined : progress.testDrafts[activeTest.id]} notes={readingNotes} teacherPointer={teachingPointer} onDraftChange={persistTestDraft} onAddNote={addReadingNote} onUpdateNote={updateReadingNote} onBack={() => { setActiveTestId(null); setActiveExamId(null); }} onComplete={(score, answers) => completeTest(activeTest, score, answers)} /> : studentPage === "exams" ? <StudentExamsPage assignments={assignments} tests={allTests} studentId={selectedStudentId} theme={theme} onOpenExam={beginExam} onBackToLibrary={() => setStudentPage("library")} /> : active && current ? <motion.main key={"read-" + currentKey} initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -8 }} transition={{ type: "spring", stiffness: 280, damping: 30 }} className="mx-auto pb-16 pt-10" style={{ maxWidth: preferences.width === "narrow" ? 740 : 920 }}>
+    {teacherMode ? teacherAuthenticated ? <TeacherDashboard key="teacher-dashboard" students={students} assignments={assignments} tests={allTests} theme={classroomTheme} onAddStudent={addStudent} onUpdateStudentCode={updateStudentCode} onToggleStudentPhase={toggleStudentPhase} onCreateAssignments={createAssignments} onCreateTest={createTeacherTest} onPublishMaterial={publishTeacherTest} onUnpublishMaterial={unpublishTeacherTest} onUpdateMaterial={(testId, updates) => { const next = allTests.map((item) => item.id === testId ? { ...item, ...updates } : item); setAllTests(next); localStorage.setItem(CUSTOM_TESTS_STORAGE_KEY, JSON.stringify(next.filter((item) => item.id.startsWith("custom-")))); }} onGradeAssignment={gradeAssignment} onTeachPointer={publishTeachingPointer} onBack={() => { publishTeachingPointer(null); void signOutTeacher(); }} /> : <TeacherLoginGate theme={classroomTheme} onCancel={() => setTeacherMode(false)} onAuthenticated={() => setTeacherAuthenticated(true)} /> : studentPage === "home" ? <StudentHomePage studentName={selectedStudent?.name ?? "Student"} theme={theme} code={studentCodeInput} error={studentCodeError} onCodeChange={(value) => { setStudentCodeInput(value); setStudentCodeError(""); }} onSubmit={joinStudentProfile} onContinue={() => setStudentPage("library")} /> : practiceSession ? <FlashcardPracticeView cards={practiceSession} theme={theme} onClose={() => { setPracticeSession(null); setPracticeStep("home"); }} /> : activeTest ? <ReadingTestView key={activeTest.id + (activeExamId ?? "")} test={activeTest} theme={theme} preferences={preferences} exam={activeExam} studentId={selectedStudentId} draft={activeExam ? undefined : progress.testDrafts[activeTest.id]} notes={readingNotes} teacherPointer={teachingPointer} onDraftChange={persistTestDraft} onAddNote={addReadingNote} onUpdateNote={updateReadingNote} onBack={() => { setActiveTestId(null); setActiveExamId(null); }} onComplete={(score, answers) => completeTest(activeTest, score, answers)} /> : studentPage === "exams" ? <StudentExamsPage assignments={assignments} tests={allTests} studentId={selectedStudentId} theme={theme} onOpenExam={beginExam} onBackToLibrary={() => setStudentPage("library")} /> : active && current ? <motion.main key={"read-" + currentKey} initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -8 }} transition={{ type: "spring", stiffness: 280, damping: 30 }} className="mx-auto pb-16 pt-10" style={{ maxWidth: preferences.width === "narrow" ? 740 : 920 }}>
           <div className={preferences.focus ? "mb-10 text-center" : "mb-10"}>
             <p className="mb-3 text-xs font-bold uppercase tracking-[.18em]" style={{ color: theme.accent }}>{englishCurriculum[active.unit].title}</p>
             <h1 className="font-serif text-4xl font-semibold tracking-tight sm:text-5xl">{current.title}</h1>

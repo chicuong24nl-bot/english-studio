@@ -15,6 +15,9 @@ export default demoOnly
       if (request.nextUrl.pathname === "/demo") {
         return NextResponse.next();
       }
+      if (request.nextUrl.pathname === "/api/teacher-session") {
+        return NextResponse.next();
+      }
       return new NextResponse("Not found", { status: 404 });
     }
   : clerkConfigured
