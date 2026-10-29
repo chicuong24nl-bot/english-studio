@@ -11,7 +11,7 @@ That means a public demo URL is useful for trying the interface, but each visito
 1. Review the project and make sure `.env.local` and other secrets are not committed. Keep `.env*` ignored; `.env.example` contains placeholders only.
 2. Push the project to a GitHub repository you control. Review `git status` first and stage only the files you intend to publish.
 3. In [Vercel](https://vercel.com/new), sign in, choose **Add New → Project**, and import that GitHub repository.
-4. Keep the detected Next.js framework and the repository root as the project root. The build command is `pnpm build`; Vercel uses the package manager lockfile to install dependencies.
+4. Keep the detected Next.js framework and set **Root Directory** to `Libraria`. The build command is `pnpm build`; Vercel uses the package manager lockfile in that folder to install dependencies.
 5. For the demo-only deployment, do not add placeholder Clerk or database credentials. Deploy, then open the generated URL; `/` should redirect to `/demo`.
 6. Vercel will build on pushes to the connected production branch. Use the deployment's **Visit** link to confirm the published build.
 
@@ -25,7 +25,7 @@ Stripe variables are only needed if you enable billing. Review the database sche
 
 ## Local check before publishing
 
-From the project root:
+From the `Libraria` folder:
 
 ```powershell
 pnpm install --frozen-lockfile

@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+/Libraria/node_modules/
 /.pnp
 .pnp.js
 .yarn/install-state.gz
@@ -13,10 +14,13 @@
 # next.js
 /.next/
 /.next-*/
+/Libraria/.next/
+/Libraria/.next-*/
 /libaria-demo-dev/
 /.local-demo*.log
 /Libaria-source.zip
 /out/
+/Libraria/out/
 
 # production
 /build
