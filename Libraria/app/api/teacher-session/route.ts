@@ -67,6 +67,7 @@ export async function POST(request: Request) {
 
   const expiry = Math.floor(Date.now() / 1000) + SESSION_LIFETIME_SECONDS;
   const jar = await cookies();
+  jar.delete("libraria_student_session");
   jar.set(COOKIE_NAME, `${expiry}.${signExpiry(expiry, sessionSecret()!)}`, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

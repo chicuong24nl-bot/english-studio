@@ -17,15 +17,21 @@ That means a public demo URL is useful for trying the interface, but each visito
 
 Vercel's Git integration creates deployments from connected GitHub repositories and can redeploy on pushes. Environment-variable changes apply to new deployments, so redeploy after changing them.
 
-## Before using real classrooms
+## Connect the demo to Supabase
 
-The demo currently uses browser storage for teacher and student data. Before inviting students, replace that storage path with a shared database and authenticated teacher/student access, then deploy that production workflow. The project includes Clerk/Neon environment-variable placeholders in `.env.example`; real keys and a Neon connection string must be created in those services and added as encrypted Vercel project environment variables. Never put secret values in source files, commits, screenshots, or chat.
+The `/demo` classroom can use a private Supabase table through server-side API routes. The browser never receives the Supabase secret key. Run the migration in `supabase/migrations/202610290001_libraria_classroom_state.sql` from the Supabase SQL Editor, then add these encrypted Vercel environment variables and redeploy:
 
-### Teacher sign-in for the demo
+- `SUPABASE_URL` — the project URL, such as `https://your-project-ref.supabase.co` (no `/rest/v1/` suffix).
+- `SUPABASE_SECRET_KEY` — create a Supabase **Secret key** for server-side use. Never use a publishable key here, and never add this value to `NEXT_PUBLIC_*` variables, source files, screenshots, or chat.
+- `LIBRARIA_TEACHER_PASSWORD` and `LIBRARIA_TEACHER_SESSION_SECRET` — required for the teacher workspace. Generate the session secret with `openssl rand -hex 32`.
 
-The `/demo` teacher workspace can be gated with a single shared teacher password. In Vercel, add `LIBRARIA_TEACHER_PASSWORD` and `LIBRARIA_TEACHER_SESSION_SECRET` as encrypted environment variables, then redeploy. Use a long unique password and generate the session secret with `openssl rand -hex 32`. The teacher session uses an HTTP-only, same-site cookie and expires after 12 hours. If these variables are missing, teacher sign-in stays locked.
+After deploy, sign in as the teacher from the device that currently contains the classroom data. The app seeds the empty Supabase classroom from that browser once. Subsequent teacher changes and student progress sync through server routes. Students enter their 9-digit codes on their own devices. Keep a backup of any local data before clearing browser storage.
 
-The demo still saves materials and classroom data in each browser's local storage. The sign-in gate protects the teacher interface from casual access, but it does not turn browser storage into a shared or server-secured database. For real student accounts and cross-device material access, complete the authenticated database setup above before inviting a class.
+The publishable key is designed for browser-side Supabase clients and is not used by this server-only setup. The server secret is powerful: only the authenticated teacher session can change classroom-wide materials; student sessions can read their assigned materials and update their own progress and exam submissions.
+
+### Teacher sign-in
+
+The teacher session uses an HTTP-only, same-site cookie and expires after 12 hours. Student-code sessions are also HTTP-only and expire after 30 days. Student codes are access codes, not full user passwords; share each code only with its student.
 
 Stripe variables are only needed if you enable billing. Review the database schema and migration workflow before touching a production database; do not run the destructive seed script against real student data.
 

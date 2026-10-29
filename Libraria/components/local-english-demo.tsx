@@ -9,6 +9,7 @@ import { getReadingParagraphs, readingTests, type IELTSQuestionType, type Readin
 import { CUSTOM_TESTS_STORAGE_KEY, createLocalId, createStudentJoinCode, DEFAULT_STUDENT_ID, EXAMS_STORAGE_KEY, SELECTED_STUDENT_STORAGE_KEY, STUDENTS_STORAGE_KEY, TEACHING_POINTER_STORAGE_KEY, emptyStudentProgress, studentNotesKey, studentProgressKey, type ExamAssignment, type ReadingNote, type ReadingTestDraft, type StudentProfile, type StudentProgress, type TeachingPointer } from "@/lib/local-classroom";
 import { TeacherDashboard } from "@/components/teacher-dashboard";
 import { TeacherLoginGate } from "@/components/teacher-login-gate";
+import { collectLocalClassroomState, persistSharedClassroomValue } from "@/lib/classroom-sync-client";
 
 const LEGACY_STORAGE_KEY = "english-reader-progress";
 const SETTINGS_KEY = "english-reader-settings";
@@ -287,7 +288,7 @@ function ReadingTestView({ test, theme, preferences, exam, studentId, draft, not
     const id = card.term.trim().toLocaleLowerCase();
     const next = known ? Array.from(new Set([...knownFlashcards, id])) : knownFlashcards.filter((item) => item !== id);
     setKnownFlashcards(next);
-    localStorage.setItem(flashcardStorageKey, JSON.stringify(next));
+    persistSharedClassroomValue(flashcardStorageKey, JSON.stringify(next));
     setFlashcardFlipped(false);
     setFlashcardIndex((index) => Math.min(index + 1, (test.flashcards?.length ?? 1) - 1));
   };
@@ -421,8 +422,46 @@ export function LocalEnglishDemo() {
   const [clockNow, setClockNow] = useState(Date.now());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [headerVisible, setHeaderVisible] = useState(true);
+  const [cloudStatus, setCloudStatus] = useState<"local" | "syncing" | "connected" | "error">("local");
+  const remoteHydrated = useRef(false);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "unread" | "saved" | "read">("all");
+
+  const applyRemoteClassroom = (data: Record<string, string>) => {
+    for (const [key, value] of Object.entries(data)) {
+      if (typeof value === "string") localStorage.setItem(key, value);
+    }
+    try {
+      const rawRoster = localStorage.getItem(STUDENTS_STORAGE_KEY);
+      const roster = rawRoster ? JSON.parse(rawRoster) as StudentProfile[] : [];
+      if (Array.isArray(roster) && roster.length) {
+        const savedSelection = localStorage.getItem(SELECTED_STUDENT_STORAGE_KEY);
+        const selected = roster.find((student) => student.id === savedSelection)?.id ?? roster[0].id;
+        setStudents(roster);
+        setSelectedStudentId(selected);
+        localStorage.setItem(SELECTED_STUDENT_STORAGE_KEY, selected);
+        setProgress(readStudentProgress(selected));
+        const savedNotes = localStorage.getItem(studentNotesKey(selected));
+        const notes = savedNotes ? JSON.parse(savedNotes) : [];
+        setReadingNotes(Array.isArray(notes) ? notes : []);
+      }
+      const savedAssignments = localStorage.getItem(EXAMS_STORAGE_KEY);
+      setAssignments(savedAssignments ? JSON.parse(savedAssignments) as ExamAssignment[] : []);
+      const savedTests = localStorage.getItem(CUSTOM_TESTS_STORAGE_KEY);
+      const customTests = savedTests ? JSON.parse(savedTests) as ReadingTest[] : [];
+      setAllTests([...readingTests, ...(Array.isArray(customTests) ? customTests : [])]);
+      setTeachingPointer(() => {
+        try {
+          const raw = localStorage.getItem(TEACHING_POINTER_STORAGE_KEY);
+          const pointer = raw ? JSON.parse(raw) as TeachingPointer : null;
+          return pointer && Date.now() - pointer.updatedAt < 120_000 ? pointer : null;
+        } catch { return null; }
+      });
+      remoteHydrated.current = true;
+    } catch {
+      setCloudStatus("error");
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -431,6 +470,87 @@ export function LocalEnglishDemo() {
       .then((session) => { if (active) setTeacherAuthenticated(session?.authenticated === true); })
       .catch(() => { if (active) setTeacherAuthenticated(false); });
     return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    const syncExistingStudent = async () => {
+      try {
+        const response = await fetch("/api/classroom-state", { cache: "no-store" });
+        if (!response.ok) return;
+        const result = await response.json() as { role?: string; data?: Record<string, string> };
+        if (alive && result.role === "student" && result.data) {
+          applyRemoteClassroom(result.data);
+          setCloudStatus("connected");
+        }
+      } catch { /* Local demo remains available when no cloud connection is configured. */ }
+    };
+    void syncExistingStudent();
+    const refresh = window.setInterval(() => { void syncExistingStudent(); }, 15_000);
+    return () => { alive = false; window.clearInterval(refresh); };
+  }, []);
+
+  useEffect(() => {
+    if (!teacherAuthenticated || !teacherMode) return;
+    let alive = true;
+    let refresh = 0;
+    setCloudStatus("syncing");
+    void (async () => {
+      try {
+        const response = await fetch("/api/classroom-state", { cache: "no-store" });
+        if (response.status === 503 || response.status === 404) { if (alive) setCloudStatus("local"); return; }
+        if (!response.ok) throw new Error("Could not load the online classroom.");
+        const result = await response.json() as { configured?: boolean; initialized?: boolean; data?: Record<string, string> };
+        if (!alive) return;
+        if (result.configured === false) { setCloudStatus("local"); return; }
+        if (result.initialized && result.data) {
+          applyRemoteClassroom(result.data);
+        } else {
+          const seed = collectLocalClassroomState();
+          const seedResponse = await fetch("/api/classroom-state", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "bootstrap", data: seed }) });
+          if (!seedResponse.ok) throw new Error("Could not initialize the online classroom.");
+        }
+        setCloudStatus("connected");
+        refresh = window.setInterval(() => {
+          void fetch("/api/classroom-state", { cache: "no-store" }).then(async (nextResponse) => {
+            if (!nextResponse.ok) return;
+            const nextState = await nextResponse.json() as { data?: Record<string, string> };
+            if (alive && nextState.data) applyRemoteClassroom(nextState.data);
+          }).catch(() => undefined);
+        }, 10_000);
+      } catch {
+        if (alive) setCloudStatus("error");
+      }
+    })();
+    return () => { alive = false; if (refresh) window.clearInterval(refresh); };
+  }, [teacherAuthenticated, teacherMode]);
+
+  useEffect(() => {
+    let timer = 0;
+    let pending: Record<string, string> = {};
+    const flush = async () => {
+      timer = 0;
+      const data = pending;
+      pending = {};
+      if (!Object.keys(data).length) return;
+      try {
+        const response = await fetch("/api/classroom-state", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "save", data }) });
+        if (!response.ok) {
+          if (response.status !== 401) setCloudStatus("error");
+          return;
+        }
+        setCloudStatus("connected");
+      } catch { setCloudStatus("error"); }
+    };
+    const onWrite = (event: Event) => {
+      const detail = (event as CustomEvent<{ key?: string; value?: string }>).detail;
+      if (!detail?.key || typeof detail.value !== "string") return;
+      pending[detail.key] = detail.value;
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => { void flush(); }, 180);
+    };
+    window.addEventListener("libaria:shared-classroom-write", onWrite);
+    return () => { window.removeEventListener("libaria:shared-classroom-write", onWrite); if (timer) window.clearTimeout(timer); };
   }, []);
 
   const signOutTeacher = async () => {
@@ -463,8 +583,8 @@ export function LocalEnglishDemo() {
 
   const publishTeachingPointer = (pointer: TeachingPointer | null) => {
     setTeachingPointer(pointer);
-    if (pointer) localStorage.setItem(TEACHING_POINTER_STORAGE_KEY, JSON.stringify(pointer));
-    else localStorage.removeItem(TEACHING_POINTER_STORAGE_KEY);
+    if (pointer) persistSharedClassroomValue(TEACHING_POINTER_STORAGE_KEY, JSON.stringify(pointer));
+    else persistSharedClassroomValue(TEACHING_POINTER_STORAGE_KEY, "null");
     teachingChannel.current?.postMessage(pointer);
   };
 
@@ -613,7 +733,7 @@ export function LocalEnglishDemo() {
   };
   const updateProgress = (next: Progress) => {
     setProgress(next);
-    localStorage.setItem(studentProgressKey(selectedStudentId), JSON.stringify(next));
+    persistSharedClassroomValue(studentProgressKey(selectedStudentId), JSON.stringify(next));
   };
   const persistTestDraft = useCallback((testId: string, draft: ReadingTestDraft) => {
     setProgress((current) => {
@@ -622,7 +742,7 @@ export function LocalEnglishDemo() {
         testsStarted: Array.from(new Set([...current.testsStarted, testId])),
         testDrafts: { ...current.testDrafts, [testId]: draft },
       };
-      localStorage.setItem(studentProgressKey(selectedStudentId), JSON.stringify(next));
+      persistSharedClassroomValue(studentProgressKey(selectedStudentId), JSON.stringify(next));
       return next;
     });
   }, [selectedStudentId]);
@@ -646,30 +766,47 @@ export function LocalEnglishDemo() {
   const joinStudentProfile = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const code = studentCodeInput.toUpperCase().replace(/[^A-Z0-9]/g, "");
-    const student = students.find((profile) => profile.joinCode?.toUpperCase() === code);
-    if (!student) {
-      setStudentCodeError("That code was not found. Check it with your teacher and try again.");
-      return;
-    }
-    selectStudent(student.id);
-    setStudentCodeInput("");
-    setStudentCodeError("");
+    void (async () => {
+      try {
+        const response = await fetch("/api/student-session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
+        if (response.ok) {
+          const joined = await response.json() as { student?: { id?: string } };
+          const stateResponse = await fetch("/api/classroom-state", { cache: "no-store" });
+          if (!stateResponse.ok) throw new Error("Your profile opened, but shared data could not be loaded. Please try again.");
+          const state = await stateResponse.json() as { data?: Record<string, string> };
+          if (state.data) applyRemoteClassroom(state.data);
+          if (joined.student?.id) selectStudent(joined.student.id);
+          setCloudStatus("connected");
+          setStudentCodeInput("");
+          setStudentCodeError("");
+          return;
+        }
+        const result = await response.json() as { error?: string };
+        if (response.status === 503 && result.error?.includes("environment variables")) {
+          const localStudent = students.find((profile) => profile.joinCode?.toUpperCase() === code);
+          if (localStudent) { selectStudent(localStudent.id); setStudentCodeInput(""); setStudentCodeError(""); return; }
+        }
+        throw new Error(result.error ?? "That code was not found. Check it with your teacher and try again.");
+      } catch (error) {
+        setStudentCodeError(error instanceof Error ? error.message : "Could not open this student profile.");
+      }
+    })();
   };
   const addReadingNote = (note: ReadingNote) => {
     const next = [note, ...readingNotes];
     setReadingNotes(next);
-    localStorage.setItem(studentNotesKey(note.studentId), JSON.stringify(next));
+    persistSharedClassroomValue(studentNotesKey(note.studentId), JSON.stringify(next));
   };
   const updateReadingNote = (noteId: string, text: string) => {
     const next = readingNotes.map((note) => note.id === noteId ? { ...note, text } : note);
     setReadingNotes(next);
-    localStorage.setItem(studentNotesKey(selectedStudentId), JSON.stringify(next));
+    persistSharedClassroomValue(studentNotesKey(selectedStudentId), JSON.stringify(next));
   };
   const addStudent = (name: string) => {
     const student: StudentProfile = { id: createLocalId(), name, joinCode: createStudentJoinCode(students.flatMap((profile) => profile.joinCode ? [profile.joinCode] : [])), createdAt: new Date().toISOString(), unlockedPhases: [1] };
     const next = [...students, student];
     setStudents(next);
-    localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(next));
+    persistSharedClassroomValue(STUDENTS_STORAGE_KEY, JSON.stringify(next));
     return student;
   };
   const toggleStudentPhase = (studentId: string, phase: number) => {
@@ -680,26 +817,26 @@ export function LocalEnglishDemo() {
       return { ...student, unlockedPhases: current.includes(phase) ? current.filter((item) => item !== phase) : [...current, phase].sort() };
     });
     setStudents(next);
-    localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(next));
+    persistSharedClassroomValue(STUDENTS_STORAGE_KEY, JSON.stringify(next));
     if (studentId === selectedStudentId && !next.find((student) => student.id === studentId)?.unlockedPhases.includes(activePhase)) setActivePhase(1);
   };
   const updateStudentCode = (studentId: string, code: string) => {
     if (!/^\d{9}$/.test(code) || students.some((student) => student.id !== studentId && student.joinCode === code)) return false;
     const next = students.map((student) => student.id === studentId ? { ...student, joinCode: code } : student);
     setStudents(next);
-    localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(next));
+    persistSharedClassroomValue(STUDENTS_STORAGE_KEY, JSON.stringify(next));
     return true;
   };
     const createAssignments = (newAssignments: ExamAssignment[]) => {
     const next = [...assignments, ...newAssignments];
     setAssignments(next);
-    localStorage.setItem(EXAMS_STORAGE_KEY, JSON.stringify(next));
+    persistSharedClassroomValue(EXAMS_STORAGE_KEY, JSON.stringify(next));
   };
   const createTeacherTest = (test: ReadingTest) => {
     const draft = { ...test, status: "draft" as const };
     const next = [...allTests, draft];
     setAllTests(next);
-    localStorage.setItem(CUSTOM_TESTS_STORAGE_KEY, JSON.stringify(next.filter((item) => item.id.startsWith("custom-"))));
+    persistSharedClassroomValue(CUSTOM_TESTS_STORAGE_KEY, JSON.stringify(next.filter((item) => item.id.startsWith("custom-"))));
   };
   const publishTeacherTest = (testId: string) => {
     const source = allTests.find((item) => item.id === testId);
@@ -707,7 +844,7 @@ export function LocalEnglishDemo() {
     const published = { ...source, status: "published" as const };
     const nextTests = allTests.map((item) => item.id === testId ? published : item);
     setAllTests(nextTests);
-    localStorage.setItem(CUSTOM_TESTS_STORAGE_KEY, JSON.stringify(nextTests.filter((item) => item.id.startsWith("custom-"))));
+    persistSharedClassroomValue(CUSTOM_TESTS_STORAGE_KEY, JSON.stringify(nextTests.filter((item) => item.id.startsWith("custom-"))));
     if (published.kind === "exam" || published.timedExam) {
       const targets = students.filter((student) => (published.visibility === "all" || published.visibility === "groups" && Boolean(student.groupName && published.groupNames?.includes(student.groupName)) || published.visibility === "students" && Boolean(published.studentIds?.includes(student.id))) && !assignments.some((assignment) => assignment.testId === testId && assignment.studentId === student.id));
       const startsAt = published.opensAt ?? new Date().toISOString();
@@ -721,7 +858,7 @@ export function LocalEnglishDemo() {
     const unpublished = { ...source, status: "draft" as const };
     const nextTests = allTests.map((item) => item.id === testId ? unpublished : item);
     setAllTests(nextTests);
-    localStorage.setItem(CUSTOM_TESTS_STORAGE_KEY, JSON.stringify(nextTests.filter((item) => item.id.startsWith("custom-"))));
+    persistSharedClassroomValue(CUSTOM_TESTS_STORAGE_KEY, JSON.stringify(nextTests.filter((item) => item.id.startsWith("custom-"))));
   };
   const beginExam = (assignment: ExamAssignment) => {
     const now = new Date().toISOString();
@@ -730,7 +867,7 @@ export function LocalEnglishDemo() {
     if (shouldMarkStarted || shouldMarkReviewed) {
       const next = assignments.map((item) => item.id === assignment.id ? { ...item, ...(shouldMarkStarted ? { startedAt: now } : {}), ...(shouldMarkReviewed ? { reviewedAt: now } : {}) } : item);
       setAssignments(next);
-      localStorage.setItem(EXAMS_STORAGE_KEY, JSON.stringify(next));
+      persistSharedClassroomValue(EXAMS_STORAGE_KEY, JSON.stringify(next));
     }
     setActive(null);
     setActiveExamId(assignment.id);
@@ -742,13 +879,13 @@ export function LocalEnglishDemo() {
     const score = questionPoints ? Object.values(questionPoints).reduce((total, points) => total + points, 0) : undefined;
     const next = assignments.map((item) => item.id === assignmentId ? { ...item, completedAt: new Date().toISOString(), answers, ...(questionPoints ? { questionPoints, gradedAt, score } : {}) } : item);
     setAssignments(next);
-    localStorage.setItem(EXAMS_STORAGE_KEY, JSON.stringify(next));
+    persistSharedClassroomValue(EXAMS_STORAGE_KEY, JSON.stringify(next));
   };
   const gradeAssignment = (assignmentId: string, questionPoints: Record<number, number>, feedback = "") => {
     const score = Object.values(questionPoints).reduce((total, points) => total + points, 0);
     const next = assignments.map((item) => item.id === assignmentId ? { ...item, questionPoints, score, teacherFeedback: feedback || undefined, gradedAt: new Date().toISOString() } : item);
     setAssignments(next);
-    localStorage.setItem(EXAMS_STORAGE_KEY, JSON.stringify(next));
+    persistSharedClassroomValue(EXAMS_STORAGE_KEY, JSON.stringify(next));
   };
   const toggleSaved = (key: string) => updateProgress({ ...progress, saved: progress.saved.includes(key) ? progress.saved.filter((item) => item !== key) : [...progress.saved, key] });
   const markRead = () => {
@@ -856,7 +993,7 @@ export function LocalEnglishDemo() {
         </motion.header>
 
         <AnimatePresence mode="wait" initial={false}>
-    {teacherMode ? teacherAuthenticated ? <TeacherDashboard key="teacher-dashboard" students={students} assignments={assignments} tests={allTests} theme={classroomTheme} onAddStudent={addStudent} onUpdateStudentCode={updateStudentCode} onToggleStudentPhase={toggleStudentPhase} onCreateAssignments={createAssignments} onCreateTest={createTeacherTest} onPublishMaterial={publishTeacherTest} onUnpublishMaterial={unpublishTeacherTest} onUpdateMaterial={(testId, updates) => { const next = allTests.map((item) => item.id === testId ? { ...item, ...updates } : item); setAllTests(next); localStorage.setItem(CUSTOM_TESTS_STORAGE_KEY, JSON.stringify(next.filter((item) => item.id.startsWith("custom-")))); }} onGradeAssignment={gradeAssignment} onTeachPointer={publishTeachingPointer} onBack={() => { publishTeachingPointer(null); void signOutTeacher(); }} /> : <TeacherLoginGate theme={classroomTheme} onCancel={() => setTeacherMode(false)} onAuthenticated={() => setTeacherAuthenticated(true)} /> : studentPage === "home" ? <StudentHomePage studentName={selectedStudent?.name ?? "Student"} theme={theme} code={studentCodeInput} error={studentCodeError} onCodeChange={(value) => { setStudentCodeInput(value); setStudentCodeError(""); }} onSubmit={joinStudentProfile} onContinue={() => setStudentPage("library")} onTeacherLogin={() => setTeacherMode(true)} /> : practiceSession ? <FlashcardPracticeView cards={practiceSession} theme={theme} onClose={() => { setPracticeSession(null); setPracticeStep("home"); }} /> : activeTest ? <ReadingTestView key={activeTest.id + (activeExamId ?? "")} test={activeTest} theme={theme} preferences={preferences} exam={activeExam} studentId={selectedStudentId} draft={activeExam ? undefined : progress.testDrafts[activeTest.id]} notes={readingNotes} teacherPointer={teachingPointer} onDraftChange={persistTestDraft} onAddNote={addReadingNote} onUpdateNote={updateReadingNote} onBack={() => { setActiveTestId(null); setActiveExamId(null); }} onComplete={(score, answers) => completeTest(activeTest, score, answers)} /> : studentPage === "exams" ? <StudentExamsPage assignments={assignments} tests={allTests} studentId={selectedStudentId} theme={theme} onOpenExam={beginExam} onBackToLibrary={() => setStudentPage("library")} /> : active && current ? <motion.main key={"read-" + currentKey} initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -8 }} transition={{ type: "spring", stiffness: 280, damping: 30 }} className="mx-auto pb-16 pt-10" style={{ maxWidth: preferences.width === "narrow" ? 740 : 920 }}>
+    {teacherMode ? teacherAuthenticated ? <TeacherDashboard key="teacher-dashboard" students={students} assignments={assignments} tests={allTests} theme={classroomTheme} onAddStudent={addStudent} onUpdateStudentCode={updateStudentCode} onToggleStudentPhase={toggleStudentPhase} onCreateAssignments={createAssignments} onCreateTest={createTeacherTest} onPublishMaterial={publishTeacherTest} onUnpublishMaterial={unpublishTeacherTest} onUpdateMaterial={(testId, updates) => { const next = allTests.map((item) => item.id === testId ? { ...item, ...updates } : item); setAllTests(next); persistSharedClassroomValue(CUSTOM_TESTS_STORAGE_KEY, JSON.stringify(next.filter((item) => item.id.startsWith("custom-")))); }} onGradeAssignment={gradeAssignment} onTeachPointer={publishTeachingPointer} onBack={() => { publishTeachingPointer(null); void signOutTeacher(); }} /> : <TeacherLoginGate theme={classroomTheme} onCancel={() => setTeacherMode(false)} onAuthenticated={() => setTeacherAuthenticated(true)} /> : studentPage === "home" ? <StudentHomePage studentName={selectedStudent?.name ?? "Student"} theme={theme} code={studentCodeInput} error={studentCodeError} onCodeChange={(value) => { setStudentCodeInput(value); setStudentCodeError(""); }} onSubmit={joinStudentProfile} onContinue={() => setStudentPage("library")} onTeacherLogin={() => setTeacherMode(true)} /> : practiceSession ? <FlashcardPracticeView cards={practiceSession} theme={theme} onClose={() => { setPracticeSession(null); setPracticeStep("home"); }} /> : activeTest ? <ReadingTestView key={activeTest.id + (activeExamId ?? "")} test={activeTest} theme={theme} preferences={preferences} exam={activeExam} studentId={selectedStudentId} draft={activeExam ? undefined : progress.testDrafts[activeTest.id]} notes={readingNotes} teacherPointer={teachingPointer} onDraftChange={persistTestDraft} onAddNote={addReadingNote} onUpdateNote={updateReadingNote} onBack={() => { setActiveTestId(null); setActiveExamId(null); }} onComplete={(score, answers) => completeTest(activeTest, score, answers)} /> : studentPage === "exams" ? <StudentExamsPage assignments={assignments} tests={allTests} studentId={selectedStudentId} theme={theme} onOpenExam={beginExam} onBackToLibrary={() => setStudentPage("library")} /> : active && current ? <motion.main key={"read-" + currentKey} initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -8 }} transition={{ type: "spring", stiffness: 280, damping: 30 }} className="mx-auto pb-16 pt-10" style={{ maxWidth: preferences.width === "narrow" ? 740 : 920 }}>
           <div className={preferences.focus ? "mb-10 text-center" : "mb-10"}>
             <p className="mb-3 text-xs font-bold uppercase tracking-[.18em]" style={{ color: theme.accent }}>{englishCurriculum[active.unit].title}</p>
             <h1 className="font-serif text-4xl font-semibold tracking-tight sm:text-5xl">{current.title}</h1>
@@ -951,7 +1088,7 @@ export function LocalEnglishDemo() {
             })}
             {visible.length === 0 && visibleTests.length === 0 && <div className="rounded-2xl border p-10 text-center" style={{ borderColor: theme.border, background: theme.surface, color: theme.muted }}><BookOpen className="mx-auto mb-3" /><p className="font-semibold">{activePhase === 1 ? "No reads found. Try another search or filter." : "No materials added to Phase " + activePhase + " yet."}</p>{activePhase === 1 ? <button onClick={() => { setQuery(""); setFilter("all"); }} className="mt-3 text-sm font-bold" style={{ color: theme.accent }}>Show all reading</button> : <p className="mt-2 text-sm">Ask teacher to add materials for your profile.</p>}</div>}
           </div>
-          <footer className="mt-10 flex items-center justify-between border-t pt-5 text-xs" style={{ borderColor: theme.border, color: theme.muted }}><span>Saved on this device. No account needed.</span><button onClick={() => { localStorage.removeItem(studentProgressKey(selectedStudentId)); if (selectedStudentId === DEFAULT_STUDENT_ID) { localStorage.removeItem(LEGACY_STORAGE_KEY); localStorage.removeItem("lingo-english-local-progress"); } setProgress(emptyProgress); }} className="underline underline-offset-4 hover:opacity-70">Clear reading progress</button></footer>
+          <footer className="mt-10 flex items-center justify-between border-t pt-5 text-xs" style={{ borderColor: theme.border, color: theme.muted }}><span>{cloudStatus === "connected" ? "Progress synced online." : cloudStatus === "syncing" ? "Syncing classroom…" : cloudStatus === "error" ? "Online sync unavailable · changes remain on this device." : "Saved on this device."}</span><button onClick={() => { localStorage.removeItem(studentProgressKey(selectedStudentId)); if (selectedStudentId === DEFAULT_STUDENT_ID) { localStorage.removeItem(LEGACY_STORAGE_KEY); localStorage.removeItem("lingo-english-local-progress"); } setProgress(emptyProgress); }} className="underline underline-offset-4 hover:opacity-70">Clear reading progress</button></footer>
         </>}
         </motion.main>}
         </AnimatePresence>

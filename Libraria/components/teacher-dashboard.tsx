@@ -146,29 +146,34 @@ export function TeacherDashboard({
   }, [students, selectedStudents, tests]);
 
   useEffect(() => {
-    const onStudentActivity = (event: StorageEvent) => {
-      if (!event.key) return;
-      const progressStudent = students.find((student) => event.key === studentProgressKey(student.id));
+    const updateStudentActivity = (key: string) => {
+      const progressStudent = students.find((student) => key === studentProgressKey(student.id));
       if (progressStudent) {
         try {
-          const raw = localStorage.getItem(event.key);
+          const raw = localStorage.getItem(key);
           setProgressByStudent((current) => ({ ...current, [progressStudent.id]: raw ? { ...emptyStudentProgress, ...JSON.parse(raw) } : emptyStudentProgress }));
         } catch { setProgressByStudent((current) => ({ ...current, [progressStudent.id]: emptyStudentProgress })); }
         return;
       }
       const flashcardPrefix = "libaria-flashcards-";
-      if (!event.key.startsWith(flashcardPrefix)) return;
-      const cardOwner = students.find((student) => tests.some((test) => event.key === flashcardPrefix + student.id + "-" + test.id));
-      const cardTest = cardOwner && tests.find((test) => event.key === flashcardPrefix + cardOwner.id + "-" + test.id);
+      if (!key.startsWith(flashcardPrefix)) return;
+      const cardOwner = students.find((student) => tests.some((test) => key === flashcardPrefix + student.id + "-" + test.id));
+      const cardTest = cardOwner && tests.find((test) => key === flashcardPrefix + cardOwner.id + "-" + test.id);
       if (!cardOwner || !cardTest) return;
       try {
-        const raw = localStorage.getItem(event.key);
+        const raw = localStorage.getItem(key);
         const cards = raw ? JSON.parse(raw) : [];
         setFlashcardProgress((current) => ({ ...current, [cardOwner.id]: { ...current[cardOwner.id], [cardTest.id]: Array.isArray(cards) ? cards.filter((id): id is string => typeof id === "string") : [] } }));
       } catch { /* A malformed saved list should not break the teacher dashboard. */ }
     };
-    window.addEventListener("storage", onStudentActivity);
-    return () => window.removeEventListener("storage", onStudentActivity);
+    const onStorage = (event: StorageEvent) => { if (event.key) updateStudentActivity(event.key); };
+    const onSharedWrite = (event: Event) => {
+      const key = (event as CustomEvent<{ key?: string }>).detail?.key;
+      if (key) updateStudentActivity(key);
+    };
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("libaria:shared-classroom-write", onSharedWrite);
+    return () => { window.removeEventListener("storage", onStorage); window.removeEventListener("libaria:shared-classroom-write", onSharedWrite); };
   }, [students, tests]);
 
   const canStudentSeeTest = (test: ReadingTest, studentId: string) => {
