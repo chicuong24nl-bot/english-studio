@@ -17,8 +17,6 @@ import { Button } from "@/components/ui/button";
 import { links } from "@/config";
 import { cn } from "@/lib/utils";
 
-const clerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
-
 const AccountActions = () => {
   return (
     <>
@@ -39,7 +37,11 @@ const AccountActions = () => {
   );
 };
 
-export const Header = () => {
+type HeaderProps = {
+  clerkConfigured: boolean;
+};
+
+export const Header = ({ clerkConfigured }: HeaderProps) => {
   const [hideBanner, setHideBanner] = useState(true);
 
   return (

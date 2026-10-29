@@ -4,7 +4,11 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 import { Sidebar } from "./sidebar";
 
-export const MobileSidebar = () => {
+type MobileSidebarProps = {
+  clerkConfigured: boolean;
+};
+
+export const MobileSidebar = ({ clerkConfigured }: MobileSidebarProps) => {
   return (
     <Sheet>
       <SheetTrigger>
@@ -12,7 +16,7 @@ export const MobileSidebar = () => {
       </SheetTrigger>
 
       <SheetContent className="z-[100] p-0" side="left">
-        <Sidebar />
+        <Sidebar clerkConfigured={clerkConfigured} />
       </SheetContent>
     </Sheet>
   );

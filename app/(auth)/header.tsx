@@ -17,8 +17,40 @@ import { Button } from "@/components/ui/button";
 import { links } from "@/config";
 import { cn } from "@/lib/utils";
 
-export const Header = () => {
+type HeaderProps = {
+  clerkConfigured: boolean;
+};
+
+const AuthActions = () => {
   const { isSignedIn } = useAuth();
+
+  return (
+    <>
+      <ClerkLoading>
+        <Loader className="h-5 w-5 animate-spin text-muted-foreground" />
+      </ClerkLoading>
+
+      <ClerkLoaded>
+        <Show when="signed-out">
+          <SignInButton>
+            <Button size="lg" variant="ghost">Login</Button>
+          </SignInButton>
+        </Show>
+
+        <Link
+          href={links.sourceCode}
+          target="_blank"
+          rel="noreferrer noopener"
+          className={isSignedIn ? "pt-1.5" : "pt-3"}
+        >
+          <Image src="/github.svg" alt="Source Code" height={20} width={20} />
+        </Link>
+      </ClerkLoaded>
+    </>
+  );
+};
+
+export const Header = ({ clerkConfigured }: HeaderProps) => {
   const [hideBanner, setHideBanner] = useState(true);
 
   return (
@@ -45,33 +77,7 @@ export const Header = () => {
           </Link>
 
           <div className="flex gap-x-3">
-            <ClerkLoading>
-              <Loader className="h-5 w-5 animate-spin text-muted-foreground" />
-            </ClerkLoading>
-
-            <ClerkLoaded>
-              <Show when="signed-out">
-                <SignInButton>
-                  <Button size="lg" variant="ghost">
-                    Login
-                  </Button>
-                </SignInButton>
-              </Show>
-
-              <Link
-                href={links.sourceCode}
-                target="_blank"
-                rel="noreferrer noopener"
-                className={isSignedIn ? "pt-1.5" : "pt-3"}
-              >
-                <Image
-                  src="/github.svg"
-                  alt="Source Code"
-                  height={20}
-                  width={20}
-                />
-              </Link>
-            </ClerkLoaded>
+            {clerkConfigured ? <AuthActions /> : <span className="pt-3 text-sm text-slate-500">Preview</span>}
           </div>
         </div>
       </header>

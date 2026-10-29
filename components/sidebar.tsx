@@ -9,9 +9,10 @@ import { SidebarItem } from "./sidebar-item";
 
 type SidebarProps = {
   className?: string;
+  clerkConfigured?: boolean;
 };
 
-export const Sidebar = ({ className }: SidebarProps) => {
+export const Sidebar = ({ className, clerkConfigured = false }: SidebarProps) => {
   return (
     <div
       className={cn(
@@ -40,19 +41,21 @@ export const Sidebar = ({ className }: SidebarProps) => {
         <SidebarItem label="Shop" href="/shop" iconSrc="/shop.svg" />
       </div>
 
-      <div className="p-4">
-        <ClerkLoading>
-          <Loader className="h-5 w-5 animate-spin text-muted-foreground" />
-        </ClerkLoading>
+      {clerkConfigured && (
+        <div className="p-4">
+          <ClerkLoading>
+            <Loader className="h-5 w-5 animate-spin text-muted-foreground" />
+          </ClerkLoading>
 
-        <ClerkLoaded>
-          <UserButton
-            appearance={{
-              elements: { userButtonPopoverCard: { pointerEvents: "initial" } },
-            }}
-          />
-        </ClerkLoaded>
-      </div>
+          <ClerkLoaded>
+            <UserButton
+              appearance={{
+                elements: { userButtonPopoverCard: { pointerEvents: "initial" } },
+              }}
+            />
+          </ClerkLoaded>
+        </div>
+      )}
     </div>
   );
 };
