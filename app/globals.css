@@ -1,0 +1,175 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+:root {
+  @apply h-full;
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+  }
+}
+
+/* React preference state drives the root design tokens so every index surface
+   responds together to style, appearance, typeface, and spacing changes. */
+.libaria-app {
+  --font-main: Arial, Helvetica, sans-serif;
+  --spacing-unit: 12px;
+  --card-gap: 18px;
+  --line-height: 1.5;
+  font-family: var(--font-main);
+  line-height: var(--line-height);
+  background-color: var(--bg-page);
+  color: var(--text-main);
+  transition: background-color 220ms ease, color 220ms ease;
+}
+.libaria-app[data-font="sans"] { --font-main: "Plus Jakarta Sans", Arial, sans-serif; }
+.libaria-app[data-font="serif"] { --font-main: Georgia, "Times New Roman", serif; }
+.libaria-app[data-font="mono"] { --font-main: "JetBrains Mono", "Courier New", monospace; }
+.libaria-app[data-spacing="compact"] { --spacing-unit: 8px; --card-gap: 12px; --line-height: 1.3; }
+.libaria-app[data-spacing="relaxed"] { --spacing-unit: 12px; --card-gap: 18px; --line-height: 1.5; }
+.libaria-app[data-spacing="spacious"] { --spacing-unit: 16px; --card-gap: 24px; --line-height: 1.7; }
+.libaria-app .scheduled-grid { gap: var(--card-gap); }
+
+.libaria-app[data-design-style="brutalism"] { --border-width: 4px; --border-radius: 0px; --card-shadow: 6px 6px 0 #000; }
+.libaria-app[data-design-style="claymorphism"] { --border-width: 0px; --border-radius: 28px; --card-shadow: 12px 12px 24px rgba(73, 88, 111, .2), -8px -8px 20px rgba(255,255,255,.8), inset -4px -4px 8px rgba(0,0,0,.05); }
+.libaria-app[data-design-style="editorial"] { --border-width: 1px; --border-radius: 4px; --card-shadow: 0 4px 20px rgba(0,0,0,.04); }
+.libaria-app[data-design-style="fiction"] { --border-width: 2px; --border-radius: 20px; --card-shadow: 0 8px 16px rgba(249, 115, 22, .12); }
+.libaria-app[data-design-style="neobrutalism"] { --border-width: 3px; --border-radius: 16px; --card-shadow: 5px 5px 0 var(--style-outline, #202020); }
+.libaria-app[data-design-style="vintage"] { --border-width: 2px; --border-radius: 8px; --card-shadow: 3px 3px 0 rgba(33,49,43,.18); }
+.libaria-app :is(.reading-hero, .exam-card) { border-width: var(--border-width, 1px) !important; border-radius: var(--border-radius, 16px) !important; box-shadow: var(--card-shadow, 0 4px 20px rgba(0,0,0,.04)) !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .libaria-app { transition-duration: 0ms; }
+}
+
+/* Six deliberately different visual grammars; palette tokens are selected in the app theme map. */
+.libaria-app :is(button, a, input, textarea, select):focus-visible { outline: 3px solid var(--style-focus, #2563eb); outline-offset: 3px; }
+.libaria-app :is(article, section, button, input, textarea, select, .rounded-xl, .rounded-2xl, .rounded-3xl) { transition-property: background-color, color, border-color, border-radius, box-shadow, transform; transition-duration: 220ms; }
+@media (prefers-reduced-motion: reduce) {
+  .libaria-app :is(article, section, button, input, textarea, select, .rounded-xl, .rounded-2xl, .rounded-3xl) { transition-duration: 0ms !important; }
+}
+
+.libaria-app[data-design-style="brutalism"] { --style-focus: #c94e39; }
+.libaria-app[data-design-style="brutalism"] :is(.rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-full) { border-radius: 0 !important; }
+.libaria-app[data-design-style="brutalism"] .border { border-width: 2px !important; }
+.libaria-app[data-design-style="brutalism"] .border-t { border-top-width: 2px !important; }
+.libaria-app[data-design-style="brutalism"] .border-b { border-bottom-width: 2px !important; }
+.libaria-app[data-design-style="brutalism"] :is(.shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl) { box-shadow: none !important; }
+.libaria-app[data-design-style="brutalism"] .font-serif { font-family: "Arial Narrow", "Franklin Gothic Medium", Arial, sans-serif; font-weight: 900; letter-spacing: -0.045em; }
+.libaria-app[data-design-style="brutalism"] header { border-bottom-width: 1px !important; }
+.libaria-app[data-design-style="brutalism"] header :is(button, select) { border: 0 !important; outline: 0; background: transparent !important; box-shadow: none !important; }
+.libaria-app[data-design-style="brutalism"] header :is(button, select):hover { background: color-mix(in srgb, var(--style-focus) 12%, transparent) !important; }
+.libaria-app[data-design-style="brutalism"] header :is(button, select):focus-visible { outline: 2px solid var(--style-focus) !important; outline-offset: 3px; }
+.libaria-app[data-design-style="brutalism"] :is(article, section, button, input, textarea, select, .rounded-xl, .rounded-2xl, .rounded-3xl) { transition-duration: 0ms; }
+
+.libaria-app[data-design-style="claymorphism"] { --style-focus: #2563eb; }
+.libaria-app[data-design-style="claymorphism"] :is(.rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-full) { border-radius: 1.75rem !important; }
+.libaria-app[data-design-style="claymorphism"] :is(article, section, button, input, textarea, select) { box-shadow: 0 12px 24px rgba(44, 75, 135, .13), inset 0 2px 0 rgba(255,255,255,.85) !important; }
+.libaria-app[data-design-style="claymorphism"] .reading-hero { border: 0 !important; outline: 0 !important; }
+.libaria-app[data-design-style="claymorphism"] :is(button, input, textarea, select) { border-width: 1px !important; }
+.libaria-app[data-design-style="claymorphism"] button:not(:disabled):active { transform: translateY(2px) scale(.985); }
+.libaria-app[data-design-style="claymorphism"] .font-serif { font-family: "Trebuchet MS", "Arial Rounded MT Bold", Arial, sans-serif; font-weight: 800; letter-spacing: -.03em; }
+
+.libaria-app[data-design-style="editorial"] { --style-focus: #9b593c; }
+.libaria-app[data-design-style="editorial"] :is(.rounded-xl, .rounded-2xl, .rounded-3xl) { border-radius: .45rem !important; }
+.libaria-app[data-design-style="editorial"] :is(.shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl) { box-shadow: none !important; }
+.libaria-app[data-design-style="editorial"] .font-serif { font-family: Georgia, "Times New Roman", serif; letter-spacing: -.035em; }
+.libaria-app[data-design-style="editorial"] main { font-family: Georgia, "Times New Roman", serif; }
+
+.libaria-app[data-design-style="fiction"] { --style-focus: #222; }
+.libaria-app[data-design-style="fiction"] :is(.rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-full) { border-radius: 1.4rem !important; }
+.libaria-app[data-design-style="fiction"] .border { border-width: 2px !important; }
+.libaria-app[data-design-style="fiction"] .border-t { border-top-width: 2px !important; }
+.libaria-app[data-design-style="fiction"] .border-b { border-bottom-width: 2px !important; }
+.libaria-app[data-design-style="fiction"] :is(.shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl) { box-shadow: none !important; }
+.libaria-app[data-design-style="fiction"] .font-serif { font-family: "Trebuchet MS", "Comic Sans MS", sans-serif; font-weight: 900; letter-spacing: -.035em; }
+.libaria-app[data-design-style="fiction"] main > div:first-child { position: relative; }
+.libaria-app[data-design-style="fiction"] main > div:first-child::after { content: "✦"; position: absolute; top: -1.25rem; right: .5rem; color: #df684d; font-size: 2rem; transform: rotate(12deg); pointer-events: none; }
+
+.libaria-app[data-design-style="neobrutalism"] { --style-focus: #432dd7; }
+.libaria-app[data-design-style="neobrutalism"] :is(.rounded-xl, .rounded-2xl, .rounded-3xl) { border-radius: .35rem !important; }
+.libaria-app[data-design-style="neobrutalism"] .border { border-width: 2px !important; }
+.libaria-app[data-design-style="neobrutalism"] .border-t { border-top-width: 2px !important; }
+.libaria-app[data-design-style="neobrutalism"] .border-b { border-bottom-width: 2px !important; }
+.libaria-app[data-design-style="neobrutalism"] :is(article, section, button, input, textarea, select) { box-shadow: 4px 4px 0 var(--style-outline, #202020) !important; }
+.libaria-app[data-design-style="neobrutalism"] { --style-outline: #202020; }
+.libaria-app[data-design-style="neobrutalism"][data-mode="dark"] { --style-outline: #f3efe3; }
+.libaria-app[data-design-style="neobrutalism"] button:not(:disabled):active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 var(--style-outline) !important; }
+.libaria-app[data-design-style="neobrutalism"] .font-serif { font-family: Inter, Arial, Helvetica, sans-serif; font-weight: 900; letter-spacing: -.05em; }
+
+.libaria-app[data-design-style="vintage"] { --style-focus: #008f87; background-image: repeating-linear-gradient(0deg, transparent 0 3px, rgba(32,37,33,.035) 3px 4px); }
+.libaria-app[data-design-style="vintage"] :is(article, section) { border-style: outset !important; border-width: 2px !important; box-shadow: 3px 3px 0 rgba(33,49,43,.18) !important; }
+.libaria-app[data-design-style="vintage"] :is(button, input, textarea, select) { border-style: inset !important; border-width: 2px !important; border-radius: .3rem !important; font-family: "Courier New", monospace; }
+.libaria-app[data-design-style="vintage"] .font-serif { font-family: Georgia, "Times New Roman", serif; text-shadow: 1px 1px 0 rgba(0,0,0,.1); }
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}

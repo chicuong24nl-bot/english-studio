@@ -1,20 +1,26 @@
-# English Studio — Stage 1
+# Libraria
 
-English reading and writing practice for Stage 1 (B2 foundation), based on the supplied six-reading packet, IELTS analysis framework, and English grammar PDF.
-
-## Included
-
-- Six full English reading passages with six-layer analysis: outline, idea units, contextual vocabulary, sentence patterns, discourse/stance, and common traps.
-- 82 clickable flashcards, 57 multiple-choice questions with answer explanations, and 12 writing prompts with autosaved drafts.
-- Teacher dashboard for student record editing, active status, code management, and learning progress summaries.
-- Adjustable quiz length, display themes, font size, accent colours, and interface styles.
-- Grammar reference topics extracted from the supplied grammar PDF.
-- Student access codes, teacher sign-in, Supabase progress sync, and unlimited practice attempts.
+An English reading app with short stories, three comprehension tests, bookmarks, and customizable reading settings.
 
 ## Run locally
 
-1. Install Node.js LTS.
-2. In this folder, run `npm run dev`.
-3. Open `http://localhost:4173`.
+1. Install Node.js and pnpm.
+2. Install packages with `pnpm install`.
+3. Start the app with `pnpm dev` and open `http://localhost:3000`.
 
-See [SETUP.md](SETUP.md) for Supabase, teacher access, student roster, and Vercel deployment steps.
+The public landing page runs without service credentials. Account sign-in requires Clerk; saved lessons and course progress require Clerk plus a Neon Postgres database. See `.env.example` for configuration. Stripe keys are only needed for subscription features.
+
+## Load English lesson content
+
+Set up a disposable Neon database, configure `DATABASE_URL`, and run:
+
+```sh
+pnpm db:push
+ALLOW_DESTRUCTIVE_SEED=true pnpm db:prod
+```
+
+**The seed command clears learner progress, subscriptions, and existing course content in the configured database. Use it only with a disposable database.**
+
+## Source and license
+
+Based on [sanidhyy/duolingo-clone](https://github.com/sanidhyy/duolingo-clone). See [LICENSE](LICENSE) for the MIT license.
