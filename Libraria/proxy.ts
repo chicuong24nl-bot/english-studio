@@ -15,7 +15,7 @@ export default demoOnly
       if (request.nextUrl.pathname === "/demo") {
         return NextResponse.next();
       }
-      if (request.nextUrl.pathname === "/api/teacher-session") {
+      if (["/api/teacher-session", "/api/student-session", "/api/classroom-state"].includes(request.nextUrl.pathname)) {
         return NextResponse.next();
       }
       return new NextResponse("Not found", { status: 404 });

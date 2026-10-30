@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 export const TEACHER_COOKIE = "libraria_teacher_session";
 export const STUDENT_COOKIE = "libraria_student_session";
 export const STUDENT_SESSION_SECONDS = 60 * 60 * 24 * 30;
+export const TEACHER_SESSION_SECONDS = 60 * 60 * 12;
 
 export type SharedClassroomState = Record<string, string>;
 
@@ -23,11 +24,23 @@ function verifySignature(value: string, expected: string) {
 export function hasValidTeacherSession(value: string | undefined) {
   const secret = sessionSecret();
   if (!secret || !value) return false;
-  const [expiryText, suppliedSignature] = value.split(".");
+  const separator = value.lastIndexOf(".");
+  if (separator < 0) return false;
+  const payload = value.slice(0, separator);
+  const suppliedSignature = value.slice(separator + 1);
+  const [expiryText, userId] = payload.split(".");
   const expiry = Number(expiryText);
   const now = Math.floor(Date.now() / 1000);
-  if (!Number.isSafeInteger(expiry) || expiry <= now || expiry > now + 60 * 60 * 13 || !suppliedSignature) return false;
-  return verifySignature(suppliedSignature, signature(`teacher:${expiry}`, secret));
+  if (!Number.isSafeInteger(expiry) || expiry <= now || expiry > now + TEACHER_SESSION_SECONDS + 60 || !userId || !suppliedSignature) return false;
+  return verifySignature(suppliedSignature, signature(`teacher:${payload}`, secret));
+}
+
+export function createTeacherSession(userId: string) {
+  const secret = sessionSecret();
+  if (!secret) throw new Error("Teacher sessions are not configured.");
+  const expiry = Math.floor(Date.now() / 1000) + TEACHER_SESSION_SECONDS;
+  const payload = `${expiry}.${userId}`;
+  return `${payload}.${signature(`teacher:${payload}`, secret)}`;
 }
 
 export function createStudentSession(studentId: string) {
@@ -56,8 +69,38 @@ export function supabaseServerConfigured() {
   return Boolean((process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) && process.env.SUPABASE_SECRET_KEY);
 }
 
+export function supabaseAuthConfigured() {
+  return Boolean(getSupabaseUrl() && process.env.SUPABASE_PUBLISHABLE_KEY && process.env.SUPABASE_SECRET_KEY && sessionSecret());
+}
+
 export function getSupabaseUrl() {
   return (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/$/, "");
+}
+
+export async function signInSupabaseTeacher(email: string, password: string) {
+  if (!supabaseAuthConfigured()) throw new Error("Supabase teacher sign-in is not configured.");
+  const url = getSupabaseUrl();
+  const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY!;
+  const signIn = await fetch(`${url}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    headers: { apikey: publishableKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+    cache: "no-store",
+  });
+  if (!signIn.ok) return { error: "Email or password is incorrect." } as const;
+  const session = await signIn.json() as { access_token?: unknown; user?: { id?: unknown; email?: unknown } };
+  const userId = session.user?.id;
+  if (typeof session.access_token !== "string" || typeof userId !== "string") return { error: "Supabase returned an invalid sign-in response." } as const;
+
+  const key = process.env.SUPABASE_SECRET_KEY!;
+  const teacherCheck = await fetch(`${url}/rest/v1/libraria_teacher_accounts?user_id=eq.${encodeURIComponent(userId)}&select=user_id`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+    cache: "no-store",
+  });
+  if (!teacherCheck.ok) throw new Error("Could not verify teacher access. Check the Supabase migration and secret key.");
+  const teachers = await teacherCheck.json() as Array<{ user_id?: string }>;
+  if (!teachers.some((teacher) => teacher.user_id === userId)) return { error: "This account is not enabled as a Libraria teacher." } as const;
+  return { userId, email: typeof session.user?.email === "string" ? session.user.email : email } as const;
 }
 
 export async function getSharedClassroomState() {

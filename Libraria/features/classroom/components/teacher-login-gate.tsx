@@ -6,6 +6,7 @@ import { ArrowLeft, BookOpen, LockKeyhole } from "lucide-react";
 type Theme = { surface: string; page: string; ink: string; muted: string; border: string; accent: string; onAccent: string };
 
 export function TeacherLoginGate({ theme, onCancel, onAuthenticated }: { theme: Theme; onCancel: () => void; onAuthenticated: () => void }) {
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -32,7 +33,7 @@ export function TeacherLoginGate({ theme, onCancel, onAuthenticated }: { theme: 
       const response = await fetch("/api/teacher-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ email, password }),
       });
       const result = await response.json() as { error?: string; authenticated?: boolean };
       if (!response.ok) {
@@ -63,18 +64,23 @@ export function TeacherLoginGate({ theme, onCancel, onAuthenticated }: { theme: 
             <p role="status" className="rounded-2xl border p-4 text-sm" style={{ borderColor: theme.border, background: theme.page, color: theme.muted }}>Checking teacher sign-in…</p>
           ) : configured === false ? (
             <div role="status" className="rounded-2xl border p-4 text-sm leading-6" style={{ borderColor: theme.border, background: theme.page, color: theme.muted }}>
-              {notice.startsWith("Could not check") ? notice : <>Teacher sign-in needs to be configured in Vercel. Add <code className="font-mono font-bold">LIBRARIA_TEACHER_PASSWORD</code> and <code className="font-mono font-bold">LIBRARIA_TEACHER_SESSION_SECRET</code> to the project’s Environment Variables, then redeploy.</>}
+              {notice.startsWith("Could not check") ? notice : <>Teacher sign-in needs Supabase setup. Add <code className="font-mono font-bold">SUPABASE_URL</code>, <code className="font-mono font-bold">SUPABASE_PUBLISHABLE_KEY</code>, <code className="font-mono font-bold">SUPABASE_SECRET_KEY</code>, and <code className="font-mono font-bold">LIBRARIA_TEACHER_SESSION_SECRET</code> to Vercel, then redeploy.</>}
             </div>
           ) : (
-            <label className="block text-sm font-semibold">Teacher password
-              <span className="relative mt-2 block"><LockKeyhole size={16} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: theme.muted }} /><input autoComplete="current-password" autoFocus type="password" value={password} onChange={(event) => setPassword(event.target.value)} required maxLength={256} className="h-12 w-full rounded-xl border bg-transparent pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-600/30" style={{ borderColor: theme.border, color: theme.ink }} placeholder="Enter your teacher password" /></span>
-            </label>
+            <>
+              <label className="block text-sm font-semibold">Teacher email
+                <input autoComplete="username" autoFocus type="email" value={email} onChange={(event) => setEmail(event.target.value)} required maxLength={320} className="mt-2 h-12 w-full rounded-xl border bg-transparent px-4 outline-none focus:ring-2 focus:ring-emerald-600/30" style={{ borderColor: theme.border, color: theme.ink }} placeholder="you@example.com" />
+              </label>
+              <label className="block text-sm font-semibold">Password
+                <span className="relative mt-2 block"><LockKeyhole size={16} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: theme.muted }} /><input autoComplete="current-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required maxLength={256} className="h-12 w-full rounded-xl border bg-transparent pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-600/30" style={{ borderColor: theme.border, color: theme.ink }} placeholder="Enter your password" /></span>
+              </label>
+            </>
           )}
           {notice && configured !== false && <p role="alert" className="text-sm text-red-700">{notice}</p>}
-          {configured === true && <button disabled={busy || !password} type="submit" className="inline-flex min-h-12 w-full items-center justify-center rounded-full px-5 text-sm font-bold disabled:opacity-50" style={{ background: theme.accent, color: theme.onAccent }}>{busy ? "Signing in…" : "Sign in"}</button>}
+          {configured === true && <button disabled={busy || !email || !password} type="submit" className="inline-flex min-h-12 w-full items-center justify-center rounded-full px-5 text-sm font-bold disabled:opacity-50" style={{ background: theme.accent, color: theme.onAccent }}>{busy ? "Signing in…" : "Sign in"}</button>}
           {configured === false && notice && <p role="alert" className="text-sm text-amber-800">{notice}</p>}
         </form>
-        {configured !== false && <p className="mt-5 text-xs" style={{ color: theme.muted }}>For privacy, this teacher session expires after 12 hours.</p>}
+        {configured !== false && <p className="mt-5 text-xs" style={{ color: theme.muted }}>Teacher accounts are created by your Libraria administrator. Session expires after 12 hours.</p>}
       </section>
     </main>
   );
