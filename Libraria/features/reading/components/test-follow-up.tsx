@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { Clipboard, Eye, Users } from "lucide-react";
-import type { ReadingTest } from "@/content/reading-tests";
-import type { ExamAssignment, StudentProfile } from "@/lib/local-classroom";
+import type { ReadingTest } from "@/features/reading/data/reading-tests";
+import type { ExamAssignment, StudentProfile } from "@/features/classroom/data-model";
 
 type Theme = { page: string; surface: string; ink: string; muted: string; border: string; accent: string; onAccent: string };
 

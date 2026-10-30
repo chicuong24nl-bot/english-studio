@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { ArrowLeft, BookOpen, CalendarClock, Check, Clock3, Copy, Eye, LockKeyhole, Plus, Presentation, Search, Settings2, StickyNote, Users, X } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { getReadingParagraphs, type ReadingFlashcard, type ReadingQuestion, type ReadingTest } from "@/content/reading-tests";
-import { IELTSTestWizard } from "@/components/ielts-test-wizard";
-import { studentProgressKey, createLocalId, emptyStudentProgress, type ExamAssignment, type StudentProfile, type StudentProgress, type TeachingPointer } from "@/lib/local-classroom";
-import { readingVocabularyDecks } from "@/content/reading-flashcards";
+import { getReadingParagraphs, type ReadingFlashcard, type ReadingQuestion, type ReadingTest } from "@/features/reading/data/reading-tests";
+import { IELTSTestWizard } from "@/features/reading/components/test-builder";
+import { studentProgressKey, createLocalId, emptyStudentProgress, type ExamAssignment, type StudentProfile, type StudentProgress, type TeachingPointer } from "@/features/classroom/data-model";
+import { readingVocabularyDecks } from "@/features/reading/data/vocabulary-decks";
 
 type Theme = { page: string; surface: string; ink: string; muted: string; border: string; accent: string; onAccent: string };
 type TeacherSettings = { classroomName: string; defaultMaterialPhase: 1 | 2 | 3 | 4; defaultExamMinutes: number; defaultMaterialVisibility: "all" | "students" | "groups" };

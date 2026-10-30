@@ -4,12 +4,12 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSPr
 import { ArrowLeft, ArrowRight, Bookmark, BookOpen, CalendarClock, Check, CheckCircle2, ChevronDown, Clock3, Layers3, LockKeyhole, Minus, Plus, RotateCcw, Search, Settings2, Sparkles, StickyNote, Type, X, XCircle } from "lucide-react";
 import { AnimatePresence, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
 import { englishCurriculum } from "@/content/english-curriculum";
-import { readingVocabularyDecks } from "@/content/reading-flashcards";
-import { getReadingParagraphs, readingTests, type IELTSQuestionType, type ReadingFlashcard, type ReadingPassage, type ReadingQuestion, type ReadingTest } from "@/content/reading-tests";
-import { CUSTOM_TESTS_STORAGE_KEY, createLocalId, createStudentJoinCode, DEFAULT_STUDENT_ID, EXAMS_STORAGE_KEY, SELECTED_STUDENT_STORAGE_KEY, STUDENTS_STORAGE_KEY, TEACHING_POINTER_STORAGE_KEY, emptyStudentProgress, studentNotesKey, studentProgressKey, type ExamAssignment, type ReadingNote, type ReadingTestDraft, type StudentProfile, type StudentProgress, type TeachingPointer } from "@/lib/local-classroom";
-import { TeacherDashboard } from "@/components/teacher-dashboard";
-import { TeacherLoginGate } from "@/components/teacher-login-gate";
-import { collectLocalClassroomState, persistSharedClassroomValue } from "@/lib/classroom-sync-client";
+import { readingVocabularyDecks } from "@/features/reading/data/vocabulary-decks";
+import { getReadingParagraphs, readingTests, type IELTSQuestionType, type ReadingFlashcard, type ReadingPassage, type ReadingQuestion, type ReadingTest } from "@/features/reading/data/reading-tests";
+import { CUSTOM_TESTS_STORAGE_KEY, createLocalId, createStudentJoinCode, DEFAULT_STUDENT_ID, EXAMS_STORAGE_KEY, SELECTED_STUDENT_STORAGE_KEY, STUDENTS_STORAGE_KEY, TEACHING_POINTER_STORAGE_KEY, emptyStudentProgress, studentNotesKey, studentProgressKey, type ExamAssignment, type ReadingNote, type ReadingTestDraft, type StudentProfile, type StudentProgress, type TeachingPointer } from "@/features/classroom/data-model";
+import { TeacherDashboard } from "@/features/classroom/components/teacher-dashboard";
+import { TeacherLoginGate } from "@/features/classroom/components/teacher-login-gate";
+import { collectLocalClassroomState, persistSharedClassroomValue } from "@/features/classroom/client-sync";
 
 const LEGACY_STORAGE_KEY = "english-reader-progress";
 const SETTINGS_KEY = "english-reader-settings";
@@ -394,7 +394,7 @@ function StudentExamsPage({ assignments, tests, studentId, theme, onOpenExam, on
   </main>;
 }
 
-export function LocalEnglishDemo() {
+export function ReadingApp() {
   const reduceMotion = useReducedMotion();
   const [progress, setProgress] = useState<Progress>(emptyProgress);
   const [allTests, setAllTests] = useState<ReadingTest[]>(readingTests);

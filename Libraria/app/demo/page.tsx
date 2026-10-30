@@ -1,5 +1,5 @@
-import { LocalEnglishDemo } from "@/components/local-english-demo";
+import { ReadingApp } from "@/features/reading/components/reading-app";
 
 export default function DemoPage() {
-  return <LocalEnglishDemo />;
+  return <ReadingApp />;
 }

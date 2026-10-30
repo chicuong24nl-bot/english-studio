@@ -1,4 +1,4 @@
-import type { ReadingFlashcard } from "@/content/reading-tests";
+import type { ReadingFlashcard } from "@/features/reading/data/reading-tests";
 
 export type VocabularyDeck = { section: number; title: string; cards: ReadingFlashcard[] };
 

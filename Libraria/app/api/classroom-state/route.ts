@@ -13,7 +13,7 @@ import {
   TEACHER_COOKIE,
   hasValidTeacherSession,
   type SharedClassroomState,
-} from "@/lib/classroom-state-server";
+} from "@/features/classroom/server-state";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

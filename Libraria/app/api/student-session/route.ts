@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { createStudentSession, getSharedClassroomState, parseStateValue, sameOriginRequest, STUDENT_COOKIE, STUDENT_SESSION_SECONDS, type SharedClassroomState } from "@/lib/classroom-state-server";
+import { createStudentSession, getSharedClassroomState, parseStateValue, sameOriginRequest, STUDENT_COOKIE, STUDENT_SESSION_SECONDS, type SharedClassroomState } from "@/features/classroom/server-state";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

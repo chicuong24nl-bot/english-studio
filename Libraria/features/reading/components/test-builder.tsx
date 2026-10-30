@@ -2,8 +2,8 @@
 
 import { useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Check, Eye, Plus, Upload, X } from "lucide-react";
-import type { IELTSQuestionType, ReadingPassage, ReadingQuestion, ReadingQuestionGroup, ReadingTest } from "@/content/reading-tests";
-import { createLocalId, type StudentProfile } from "@/lib/local-classroom";
+import type { IELTSQuestionType, ReadingPassage, ReadingQuestion, ReadingQuestionGroup, ReadingTest } from "@/features/reading/data/reading-tests";
+import { createLocalId, type StudentProfile } from "@/features/classroom/data-model";
 
 type Theme = { page: string; surface: string; ink: string; muted: string; border: string; accent: string; onAccent: string };
 type DraftQuestion = { id: string; type: IELTSQuestionType; prompt: string; options: string[]; answer: string; explanation: string; passageIndex: number };

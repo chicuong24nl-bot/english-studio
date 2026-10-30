@@ -2,6 +2,21 @@
 
 An English reading app with short stories, three comprehension tests, bookmarks, and customizable reading settings.
 
+## Project structure
+
+```text
+app/                 Next.js routes, layouts, and API endpoints
+components/          Shared UI components
+features/
+  classroom/         Teacher tools, student/classroom state, and sync
+  reading/           Reading experience, IELTS test builder, and study decks
+content/             Shared curriculum content
+lib/                 Shared application utilities and service clients
+supabase/migrations/ Database schema changes
+```
+
+Feature-specific UI and data live together under `features/`; `app/` stays focused on routing and API entry points.
+
 ## Run locally
 
 1. Install Node.js and pnpm.
