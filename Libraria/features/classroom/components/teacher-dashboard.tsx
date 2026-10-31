@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { ArrowLeft, BookOpen, CalendarClock, Check, Clock3, Copy, Eye, LockKeyhole, Plus, Presentation, Search, Settings2, StickyNote, Users, X } from "lucide-react";
+import { ArrowLeft, BookOpen, CalendarClock, Check, Clock3, Copy, Eye, LockKeyhole, Plus, Presentation, Search, Settings2, StickyNote, Trash2, Users, X } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { getReadingParagraphs, type ReadingFlashcard, type ReadingQuestion, type ReadingTest } from "@/features/reading/data/reading-tests";
 import { IELTSTestWizard } from "@/features/reading/components/test-builder";
@@ -19,6 +19,7 @@ export function TeacherDashboard({
   tests,
   theme,
   onAddStudent,
+  onDeleteStudent,
   onUpdateStudentCode,
   onToggleStudentPhase,
   onCreateAssignments,
@@ -37,6 +38,7 @@ export function TeacherDashboard({
   tests: ReadingTest[];
   theme: Theme;
   onAddStudent: (name: string) => StudentProfile;
+  onDeleteStudent: (studentId: string) => void;
   onUpdateStudentCode: (studentId: string, code: string) => boolean;
   onToggleStudentPhase: (studentId: string, phase: number) => void;
   onCreateAssignments: (assignments: ExamAssignment[]) => void;
@@ -428,6 +430,7 @@ export function TeacherDashboard({
                 </div>}
                 <p className="mt-2 text-xs" style={{ color: theme.muted }}>{assigned.length} exam{assigned.length === 1 ? "" : "s"} assigned</p>
                 <button type="button" onClick={() => { setSelectedStudents([student.id]); setAssignmentSuccess(""); setExamNotice(""); setActiveTab("exams"); setShowAssignmentForm(true); window.setTimeout(() => document.getElementById("assign-exam-form")?.scrollIntoView({ behavior: "smooth", block: "center" }), 40); }} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-bold shadow-sm transition hover:brightness-105" style={{ background: theme.accent, color: "#14201a" }}><CalendarClock size={16} />Assign exam</button>
+                <button type="button" onClick={() => onDeleteStudent(student.id)} className="mt-2 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold transition hover:bg-red-50/10" style={{ borderColor: theme.border, color: "#b54747" }}><Trash2 size={15} />Delete profile</button>
               </div>
             </article>;
           })}
