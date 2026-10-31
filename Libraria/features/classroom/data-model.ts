@@ -35,6 +35,9 @@ export type TeachingPointer = {
   paragraphIndex: number;
   x: number;
   y: number;
+  highlightStart?: number;
+  highlightEnd?: number;
+  highlightText?: string;
   teacherName: string;
   updatedAt: number;
 };

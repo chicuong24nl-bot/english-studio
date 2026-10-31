@@ -114,12 +114,34 @@ export function TeacherDashboard({
     return !test.studentId || test.studentId === student.id;
   }).map((student) => student.id);
 
-  const publishPointerFromPassage = (event: ReactPointerEvent<HTMLDivElement>, paragraphIndex: number) => {
+  const publishPointerFromPassage = (event: ReactPointerEvent<HTMLDivElement>, paragraphIndex: number, force = false) => {
     const now = Date.now();
-    if (now - lastTeachPointerAt.current < 75 || !selectedTeachingTest || !selectedTeachingSection) return;
+    if ((!force && now - lastTeachPointerAt.current < 75) || !selectedTeachingTest || !selectedTeachingSection) return;
     lastTeachPointerAt.current = now;
     const rect = event.currentTarget.getBoundingClientRect();
-    onTeachPointer({ testId: selectedTeachingTest.id, section: selectedTeachingSection.section, paragraphIndex, x: Math.max(0, Math.min(100, ((event.clientX - rect.left) / Math.max(1, rect.width)) * 100)), y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / Math.max(1, rect.height)) * 100)), teacherName: "Teacher", updatedAt: now });
+    const textNode = event.currentTarget.querySelector<HTMLElement>("[data-teaching-text]");
+    const selection = window.getSelection();
+    const selectedRange = selection?.rangeCount && !selection.isCollapsed ? selection.getRangeAt(0) : null;
+    let highlightStart: number | undefined;
+    let highlightEnd: number | undefined;
+    let highlightText: string | undefined;
+    if (textNode && selectedRange && textNode.contains(selectedRange.startContainer) && textNode.contains(selectedRange.endContainer)) {
+      const offsetAt = (node: Node, offset: number) => {
+        const prefix = document.createRange();
+        prefix.selectNodeContents(textNode);
+        prefix.setEnd(node, offset);
+        return prefix.toString().length;
+      };
+      highlightStart = offsetAt(selectedRange.startContainer, selectedRange.startOffset);
+      highlightEnd = offsetAt(selectedRange.endContainer, selectedRange.endOffset);
+      highlightText = selectedRange.toString();
+      if (!highlightText.trim() || highlightEnd <= highlightStart) {
+        highlightStart = undefined;
+        highlightEnd = undefined;
+        highlightText = undefined;
+      }
+    }
+    onTeachPointer({ testId: selectedTeachingTest.id, section: selectedTeachingSection.section, paragraphIndex, x: Math.max(0, Math.min(100, ((event.clientX - rect.left) / Math.max(1, rect.width)) * 100)), y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / Math.max(1, rect.height)) * 100)), highlightStart, highlightEnd, highlightText, teacherName: "Teacher", updatedAt: now });
   };
 
   useEffect(() => {
@@ -367,7 +389,7 @@ export function TeacherDashboard({
           {selectedTeachingTest && selectedTeachingSection && <>
             <div className="mt-4 flex flex-wrap items-center gap-2"><span className="mr-1 text-xs font-bold uppercase tracking-wider" style={{ color: theme.muted }}>Section</span>{teachingSections.map(({ section, passage }) => <button key={section} type="button" aria-pressed={selectedTeachSection === section} onClick={() => { setSelectedTeachSection(section); onTeachPointer(null); }} className="rounded-full border px-4 py-2 text-xs font-bold" style={{ borderColor: selectedTeachSection === section ? theme.accent : theme.border, background: selectedTeachSection === section ? theme.accent : theme.page, color: selectedTeachSection === section ? theme.onAccent : theme.ink }}>Section {section} · {passage.title}</button>)}</div>
             <div className="mt-5 grid gap-5 xl:grid-cols-[1.5fr_1fr]">
-              <article className="rounded-2xl border p-4 sm:p-6" style={{ borderColor: theme.border, background: theme.page }}><div className="mb-4 border-b pb-3" style={{ borderColor: theme.border }}><p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.accent }}>Section {selectedTeachingSection.section}</p><h3 className="mt-1 font-serif text-xl font-semibold">{selectedTeachingSection.passage.title}</h3><p className="mt-1 text-xs" style={{ color: theme.muted }}>Move your cursor over a paragraph to share its position.</p></div><div className="space-y-4 text-sm leading-7">{getReadingParagraphs(selectedTeachingSection.passage).map((paragraph, index) => { const label = paragraph.match(/^\(([A-H])\)\s*([\s\S]*)$/); return <div key={index} onPointerMove={(event) => publishPointerFromPassage(event, index)} onPointerDown={(event) => publishPointerFromPassage(event, index)} className="relative cursor-crosshair rounded-lg px-2 py-1 transition-colors hover:bg-white/60" style={{ color: theme.ink }}>{label && <span className="mr-2 inline-grid h-7 w-7 place-items-center rounded-lg border text-xs font-bold" style={{ borderColor: theme.border, color: theme.accent }}>{label[1]}</span>}{label ? label[2] : paragraph}</div>; })}</div></article>
+              <article className="rounded-2xl border p-4 sm:p-6" style={{ borderColor: theme.border, background: theme.page }}><div className="mb-4 border-b pb-3" style={{ borderColor: theme.border }}><p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.accent }}>Section {selectedTeachingSection.section}</p><h3 className="mt-1 font-serif text-xl font-semibold">{selectedTeachingSection.passage.title}</h3><p className="mt-1 text-xs" style={{ color: theme.muted }}>Move your cursor over a paragraph to share it. Select text to highlight it for students.</p></div><div className="space-y-4 text-sm leading-7">{getReadingParagraphs(selectedTeachingSection.passage).map((paragraph, index) => { const label = paragraph.match(/^\(([A-H])\)\s*([\s\S]*)$/); const paragraphText = label ? label[2] : paragraph; return <div key={index} onPointerMove={(event) => publishPointerFromPassage(event, index)} onPointerDown={(event) => publishPointerFromPassage(event, index)} onPointerUp={(event) => publishPointerFromPassage(event, index, true)} className="relative cursor-crosshair rounded-lg px-2 py-1 transition-colors hover:bg-white/60" style={{ color: theme.ink }}>{label && <span className="mr-2 inline-grid h-7 w-7 place-items-center rounded-lg border text-xs font-bold" style={{ borderColor: theme.border, color: theme.accent }}>{label[1]}</span>}<span data-teaching-text>{paragraphText}</span></div>; })}</div></article>
               <aside className="rounded-2xl border p-4 sm:p-5" style={{ borderColor: theme.border, background: theme.page }}><div className="mb-4 flex items-start gap-2"><BookOpen size={17} style={{ color: theme.accent }} /><div><p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.accent }}>Teacher notes</p><h3 className="mt-1 font-serif text-lg font-semibold">Words & collocations</h3><p className="mt-1 text-xs" style={{ color: theme.muted }}>Key language for this reading section.</p></div></div>{sectionVocabulary.length ? <div className="max-h-[34rem] space-y-2 overflow-y-auto">{sectionVocabulary.map((item, index) => <article key={`${item.term}-${index}`} className="rounded-xl border p-3" style={{ borderColor: theme.border, background: theme.surface }}><div className="flex items-start justify-between gap-2"><h4 className="font-semibold">{item.term}</h4><span className="shrink-0 rounded-full px-2 py-1 text-[9px] font-bold uppercase" style={{ background: theme.accent + "15", color: theme.accent }}>{item.kind}</span></div><p className="mt-1 text-sm leading-5" style={{ color: theme.muted }}>{item.meaning}</p>{item.example && <p className="mt-2 border-l-2 pl-2 text-xs italic leading-5" style={{ borderColor: theme.accent, color: theme.ink }}>{item.example}</p>}</article>)}</div> : <p className="rounded-xl border p-3 text-sm" style={{ borderColor: theme.border, color: theme.muted }}>No word notes yet for this section. Add flashcards to this reading test to build its vocabulary notes.</p>}</aside>
             </div>
           </>}
