@@ -165,6 +165,47 @@ body,
 .libaria-app[data-design-style="vintage"] :is(button, input, textarea, select) { border-style: inset !important; border-width: 2px !important; border-radius: .3rem !important; font-family: "Courier New", monospace; }
 .libaria-app[data-design-style="vintage"] .font-serif { font-family: Georgia, "Times New Roman", serif; text-shadow: 1px 1px 0 rgba(0,0,0,.1); }
 
+/* Tactile depth is an independent control layered over each of the six design grammars. */
+.libaria-app [data-tactile="card"],
+.libaria-app [data-tactile="control"] {
+  transform: translate3d(0, 0, 0);
+  transition: transform 240ms cubic-bezier(.2,.8,.2,1), box-shadow 240ms cubic-bezier(.2,.8,.2,1), border-color 180ms ease;
+}
+.libaria-app[data-shadow-mode="hard-offset"] :is([data-tactile="card"], [data-tactile="control"]) {
+  border: 2.5px solid var(--style-ink, #18181B) !important;
+  box-shadow: 5px 5px 0 #18181B !important;
+}
+.libaria-app[data-shadow-mode="hard-offset"] :is([data-tactile="card"], [data-tactile="control"]):not(:disabled):hover {
+  transform: translate(-3px, -3px);
+  box-shadow: 8px 8px 0 #18181B !important;
+}
+.libaria-app[data-shadow-mode="hard-offset"] :is([data-tactile="card"], [data-tactile="control"]):not(:disabled):active {
+  transform: translate(3px, 3px) scale(.99);
+  box-shadow: 1px 1px 0 #18181B !important;
+}
+.libaria-app[data-shadow-mode="hard-offset"] [data-tactile="badge"] {
+  box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 4px var(--bg-accent);
+}
+.libaria-app[data-shadow-mode="soft-elevation"] :is([data-tactile="card"], [data-tactile="control"]) {
+  border-width: 1px;
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--text-main) 9%, transparent), 0 2px 5px color-mix(in srgb, var(--text-main) 5%, transparent) !important;
+}
+.libaria-app[data-shadow-mode="soft-elevation"] :is([data-tactile="card"], [data-tactile="control"]):not(:disabled):hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--text-main) 13%, transparent), 0 4px 10px color-mix(in srgb, var(--text-main) 7%, transparent) !important;
+}
+.libaria-app[data-shadow-mode="pillowed-clay"] :is([data-tactile="card"], [data-tactile="control"]) {
+  border-width: 1px;
+  box-shadow: 10px 10px 22px color-mix(in srgb, var(--text-main) 12%, transparent), -7px -7px 18px color-mix(in srgb, var(--bg-card) 88%, white), inset 1px 1px 0 color-mix(in srgb, var(--bg-card) 84%, white) !important;
+}
+.libaria-app[data-shadow-mode="pillowed-clay"] :is([data-tactile="card"], [data-tactile="control"]):not(:disabled):hover {
+  transform: translateY(-2px) scale(1.005);
+  box-shadow: 14px 14px 26px color-mix(in srgb, var(--text-main) 15%, transparent), -8px -8px 20px color-mix(in srgb, var(--bg-card) 90%, white), inset 1px 1px 0 color-mix(in srgb, var(--bg-card) 84%, white) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .libaria-app [data-tactile] { transition-duration: 0ms !important; }
+}
+
 @layer base {
   * {
     @apply border-border;
