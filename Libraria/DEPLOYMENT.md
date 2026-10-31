@@ -1,25 +1,23 @@
 # Deploy Libraria
 
-## What is ready now
+## App behavior
 
-This Next.js project can be deployed to Vercel. In production, if Clerk is not configured, `proxy.ts` sends `/` to `/demo` and limits the site to that demo route. The demo stores student profiles, reading progress, teacher materials, assignments, grades, and teacher settings in the current browser's `localStorage`.
+This Next.js project can be deployed to Vercel. Libraria is served from `/`. The previous `/demo` URL redirects to `/`. Teacher, student, and classroom API routes remain available for Supabase-backed sign-in and sync.
 
-That means a public demo URL is useful for trying the interface, but each visitor has separate data. Teacher and student devices will not share a classroom, and browser data is not a durable database. Do not use this demo mode for real student records or exams. A shared classroom needs authenticated accounts and server-side persistence; the existing local demo does not gain that just by adding a database URL.
-
-## Publish the demo with Vercel
+## Deploy with Vercel
 
 1. Review the project and make sure `.env.local` and other secrets are not committed. Keep `.env*` ignored; `.env.example` contains placeholders only.
 2. Push the project to a GitHub repository you control. Review `git status` first and stage only the files you intend to publish.
 3. In [Vercel](https://vercel.com/new), sign in, choose **Add New → Project**, and import that GitHub repository.
 4. Keep the detected Next.js framework and set **Root Directory** to `Libraria`. The build command is `pnpm build`; Vercel uses the package manager lockfile in that folder to install dependencies.
-5. For the demo-only deployment, do not add placeholder Clerk or database credentials. Deploy, then open the generated URL; `/` should redirect to `/demo`.
+5. Deploy, then open the generated URL. The Libraria reading page should load directly at `/`.
 6. Vercel will build on pushes to the connected production branch. Use the deployment's **Visit** link to confirm the published build.
 
 Vercel's Git integration creates deployments from connected GitHub repositories and can redeploy on pushes. Environment-variable changes apply to new deployments, so redeploy after changing them.
 
-## Connect the demo to Supabase
+## Connect the classroom to Supabase
 
-The `/demo` classroom uses a private Supabase table through server-side API routes. The browser never receives the Supabase secret key. Run both SQL migrations in `supabase/migrations/` from the Supabase SQL Editor, then add these encrypted Vercel environment variables and redeploy:
+The classroom uses private Supabase tables through server-side API routes. The browser never receives the Supabase secret key. Run both SQL migrations in `supabase/migrations/` from the Supabase SQL Editor, then add these encrypted Vercel environment variables and redeploy:
 
 - `SUPABASE_URL` — the project URL, such as `https://your-project-ref.supabase.co` (no `/rest/v1/` suffix).
 - `SUPABASE_PUBLISHABLE_KEY` — the project's `sb_publishable_...` key, used only to call Supabase Auth from the server.
@@ -59,7 +57,7 @@ pnpm exec tsc --noEmit
 pnpm build
 ```
 
-Then run `pnpm start` and open `http://localhost:3000/demo` to inspect the production build locally.
+Then run `pnpm start` and open `http://localhost:3000/` to inspect the production build locally.
 
 ## Official references
 

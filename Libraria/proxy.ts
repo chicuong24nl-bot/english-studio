@@ -1,28 +1,26 @@
-import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse, type NextRequest } from "next/server";
 
-const clerkConfigured = Boolean(
-  process.env.CLERK_SECRET_KEY && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
-);
+const appApiRoutes = new Set([
+  "/api/teacher-session",
+  "/api/student-session",
+  "/api/classroom-state",
+]);
 
-const demoOnly = process.env.NODE_ENV === "production" && !clerkConfigured;
+export default function proxy(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
 
-export default demoOnly
-  ? (request: NextRequest) => {
-      if (request.nextUrl.pathname === "/") {
-        return NextResponse.redirect(new URL("/demo", request.url));
-      }
-      if (request.nextUrl.pathname === "/demo") {
-        return NextResponse.next();
-      }
-      if (["/api/teacher-session", "/api/student-session", "/api/classroom-state"].includes(request.nextUrl.pathname)) {
-        return NextResponse.next();
-      }
-      return new NextResponse("Not found", { status: 404 });
-    }
-  : clerkConfigured
-    ? clerkMiddleware()
-    : () => NextResponse.next();
+  // Keep the previous URL working while the app now lives at the root.
+  if (pathname === "/demo" || pathname.startsWith("/demo/")) {
+    return NextResponse.redirect(new URL("/", request.url), 308);
+  }
+
+  // Libraria currently exposes one reading app and its classroom APIs.
+  if (pathname === "/" || appApiRoutes.has(pathname)) {
+    return NextResponse.next();
+  }
+
+  return new NextResponse("Not found", { status: 404 });
+}
 
 export const config = {
   matcher: [

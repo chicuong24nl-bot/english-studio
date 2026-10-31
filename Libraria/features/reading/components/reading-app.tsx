@@ -483,7 +483,7 @@ export function ReadingApp() {
           applyRemoteClassroom(result.data);
           setCloudStatus("connected");
         }
-      } catch { /* Local demo remains available when no cloud connection is configured. */ }
+      } catch { /* Local reading mode remains available when no cloud connection is configured. */ }
     };
     void syncExistingStudent();
     const refresh = window.setInterval(() => { void syncExistingStudent(); }, 15_000);

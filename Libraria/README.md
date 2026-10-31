@@ -5,17 +5,27 @@ An English reading app with short stories, three comprehension tests, bookmarks,
 ## Project structure
 
 ```text
-app/                 Next.js routes, layouts, and API endpoints
-components/          Shared UI components
+app/
+  (reader)/          Main Libraria route at /
+  api/               Teacher session, student session, classroom sync
 features/
-  classroom/         Teacher tools, student/classroom state, and sync
-  reading/           Reading experience, IELTS test builder, and study decks
-content/             Shared curriculum content
-lib/                 Shared application utilities and service clients
-supabase/migrations/ Database schema changes
+  classroom/
+    components/      Teacher dashboard and sign-in
+    client-sync.ts   Browser-side classroom synchronization
+    data-model.ts    Shared classroom types and defaults
+    server-state.ts  Supabase persistence and signed sessions
+  reading/
+    components/      Reading app, test builder, test follow-up
+    data/            IELTS passages, questions, and vocabulary decks
+components/          Shared UI primitives
+content/             Curriculum content
+db/                  Drizzle schema, queries, and database client
+actions/             Server actions for the legacy course modules
+lib/                 Shared utilities and integrations
+supabase/migrations/ Supabase classroom and teacher-auth schema
 ```
 
-Feature-specific UI and data live together under `features/`; `app/` stays focused on routing and API entry points.
+Feature-specific code lives under `features/`; `app/` stays focused on routes and API entry points. The old `/demo` URL redirects to `/`.
 
 ## Run locally
 
@@ -23,7 +33,7 @@ Feature-specific UI and data live together under `features/`; `app/` stays focus
 2. Install packages with `pnpm install`.
 3. Start the app with `pnpm dev` and open `http://localhost:3000`.
 
-The public landing page runs without service credentials. Account sign-in requires Clerk; saved lessons and course progress require Clerk plus a Neon Postgres database. See `.env.example` for configuration. Stripe keys are only needed for subscription features.
+The reading app runs at `http://localhost:3000/`. Teacher sign-in and shared classroom sync require Supabase variables from `.env.example`. Stripe keys are only needed if billing is enabled.
 
 ## Load English lesson content
 
