@@ -1212,10 +1212,10 @@ export function ReadingApp() {
             {(active || activeTest) && !preferences.focus && <span className="hidden text-sm sm:inline" style={{ color: frameTheme.muted }}>Libraria <span className="mx-1">/</span>{activeTest?.title ?? current?.title}</span>}
           </div>
           {!teacherMode && <div className="flex items-center gap-2">
-            <div className="relative">
+            {studentPage !== "home" && <div className="relative">
               <button type="button" aria-expanded={profileOpen} aria-haspopup="menu" onClick={() => profileOpen ? navigateToPath("/library") : navigateToPath("/profile")} className="inline-flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition" style={{ borderColor: frameTheme.border, background: frameTheme.surface, color: frameTheme.ink }}><UserRound size={16} /><span className="max-w-32 truncate">{selectedStudent?.name ?? "My profile"}</span><ChevronDown size={14} /></button>
               <AnimatePresence>{profileOpen && <motion.div role="menu" initial={reduceMotion ? false : { opacity: 0, y: -5, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduceMotion ? undefined : { opacity: 0, y: -4 }} className="absolute right-0 top-14 z-30 w-60 rounded-2xl border p-3 shadow-xl" style={{ borderColor: frameTheme.border, background: frameTheme.surface, color: frameTheme.ink }}><p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: frameTheme.muted }}>Student profile</p><p className="truncate px-2 text-sm font-semibold">{selectedStudent?.name ?? "No student selected"}</p>{selectedStudent?.joinCode && <p className="px-2 pt-1 font-mono text-xs tracking-wider" style={{ color: frameTheme.muted }}>Code · {selectedStudent.joinCode}</p>}<button role="menuitem" type="button" onClick={() => { setProfileOpen(false); setStudentCodeInput(""); setStudentCodeError(""); setActive(null); setActiveTestId(null); setActiveExamId(null); setPracticeSession(null); navigateToPath("/"); }} className="mt-3 min-h-10 w-full rounded-xl border px-3 text-left text-sm font-semibold" style={{ borderColor: frameTheme.border }}>Switch profile / log out</button></motion.div>}</AnimatePresence>
-            </div>
+            </div>}
             {Settings}
           </div>}
           {teacherMode && teacherAuthenticated && <div className="flex items-center gap-2">{Settings}</div>}
