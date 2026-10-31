@@ -215,22 +215,24 @@ body,
 }
 .libaria-app[data-design-style="brutalism"] button:not(:disabled) {
   border: 2px solid #18181B !important;
-  box-shadow: 4px 4px 0 #18181B !important;
+  transform: translateY(-1px);
+  box-shadow: 6px 6px 0 #18181B !important;
 }
 .libaria-app[data-design-style="brutalism"] button:not(:disabled):hover {
   transform: translate(-2px, -2px);
-  box-shadow: 6px 6px 0 #18181B !important;
+  box-shadow: 8px 8px 0 #18181B !important;
 }
 .libaria-app[data-design-style="brutalism"] button:not(:disabled):active {
   transform: translate(3px, 3px);
   box-shadow: 1px 1px 0 #18181B !important;
 }
 .libaria-app[data-design-style="editorial"] button:not(:disabled) {
-  box-shadow: 0 3px 0 color-mix(in srgb, var(--text-main) 35%, transparent) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 5px 0 color-mix(in srgb, var(--text-main) 52%, transparent) !important;
 }
 .libaria-app[data-design-style="editorial"] button:not(:disabled):hover {
   transform: translateY(-2px);
-  box-shadow: 0 5px 0 color-mix(in srgb, var(--text-main) 38%, transparent) !important;
+  box-shadow: 0 7px 0 color-mix(in srgb, var(--text-main) 58%, transparent) !important;
 }
 .libaria-app[data-design-style="editorial"] button:not(:disabled):active {
   transform: translateY(2px);
@@ -238,11 +240,12 @@ body,
 }
 .libaria-app[data-design-style="fiction"] button:not(:disabled) {
   border: 2px solid #222 !important;
-  box-shadow: 4px 4px 0 #222 !important;
+  transform: translateY(-1px);
+  box-shadow: 5px 5px 0 #222 !important;
 }
 .libaria-app[data-design-style="fiction"] button:not(:disabled):hover {
   transform: translate(-2px, -2px);
-  box-shadow: 6px 6px 0 #222 !important;
+  box-shadow: 7px 7px 0 #222 !important;
 }
 .libaria-app[data-design-style="fiction"] button:not(:disabled):active {
   transform: translate(3px, 3px);
