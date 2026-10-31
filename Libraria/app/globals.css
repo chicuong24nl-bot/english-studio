@@ -206,6 +206,52 @@ body,
   .libaria-app [data-tactile] { transition-duration: 0ms !important; }
 }
 
+/* Touchable button physics for the three ink-forward styles. */
+.libaria-app[data-design-style="brutalism"] button:not(:disabled),
+.libaria-app[data-design-style="editorial"] button:not(:disabled),
+.libaria-app[data-design-style="fiction"] button:not(:disabled) {
+  position: relative;
+  transition: transform 150ms cubic-bezier(.2,.8,.2,1), box-shadow 150ms cubic-bezier(.2,.8,.2,1), background-color 160ms ease !important;
+}
+.libaria-app[data-design-style="brutalism"] button:not(:disabled) {
+  border: 2px solid #18181B !important;
+  box-shadow: 4px 4px 0 #18181B !important;
+}
+.libaria-app[data-design-style="brutalism"] button:not(:disabled):hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 #18181B !important;
+}
+.libaria-app[data-design-style="brutalism"] button:not(:disabled):active {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 #18181B !important;
+}
+.libaria-app[data-design-style="editorial"] button:not(:disabled) {
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--text-main) 35%, transparent) !important;
+}
+.libaria-app[data-design-style="editorial"] button:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 0 color-mix(in srgb, var(--text-main) 38%, transparent) !important;
+}
+.libaria-app[data-design-style="editorial"] button:not(:disabled):active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--text-main) 35%, transparent) !important;
+}
+.libaria-app[data-design-style="fiction"] button:not(:disabled) {
+  border: 2px solid #222 !important;
+  box-shadow: 4px 4px 0 #222 !important;
+}
+.libaria-app[data-design-style="fiction"] button:not(:disabled):hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 #222 !important;
+}
+.libaria-app[data-design-style="fiction"] button:not(:disabled):active {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 #222 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .libaria-app[data-design-style] button:not(:disabled) { transition-duration: 0ms !important; }
+}
+
 @layer base {
   * {
     @apply border-border;
