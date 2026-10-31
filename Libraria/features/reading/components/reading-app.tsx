@@ -13,6 +13,7 @@ import { collectLocalClassroomState, persistSharedClassroomValue } from "@/featu
 
 const LEGACY_STORAGE_KEY = "english-reader-progress";
 const SETTINGS_KEY = "english-reader-settings";
+const REMEMBERED_STUDENT_KEY = "libaria-remembered-student-id";
 const NOTES_ENABLED = false;
 type Progress = StudentProgress;
 type PracticeStep = "home" | "test" | "section" | "setup";
@@ -469,6 +470,7 @@ export function ReadingApp() {
   const [studentCodeInput, setStudentCodeInput] = useState("");
   const [studentCodeError, setStudentCodeError] = useState("");
   const [rememberStudent, setRememberStudent] = useState(false);
+  const [rememberedStudentId, setRememberedStudentId] = useState("");
   const [assignments, setAssignments] = useState<ExamAssignment[]>([]);
   const [readingNotes, setReadingNotes] = useState<ReadingNote[]>([]);
   const [teacherMode, setTeacherMode] = useState(false);
@@ -649,6 +651,7 @@ export function ReadingApp() {
   useEffect(() => {
     try {
       setRememberStudent(localStorage.getItem("libaria-remember-student") === "true");
+      setRememberedStudentId(localStorage.getItem(REMEMBERED_STUDENT_KEY) ?? "");
       const storedStudents = localStorage.getItem(STUDENTS_STORAGE_KEY);
       const parsedRoster: Array<Partial<StudentProfile>> = storedStudents ? JSON.parse(storedStudents) : [];
       const usedCodes: string[] = [];
@@ -737,6 +740,7 @@ export function ReadingApp() {
   const activeTest = allTests.find((test) => test.id === activeTestId) ?? null;
   const activeExam = assignments.find((assignment) => assignment.id === activeExamId) ?? null;
   const selectedStudent = students.find((student) => student.id === selectedStudentId);
+  const rememberedStudent = students.find((student) => student.id === rememberedStudentId);
   const unlockedPhases = selectedStudent?.unlockedPhases ?? [1];
   const currentKey = active ? active.unit + "-" + active.lesson : "";
   const lessons = useMemo(() => englishCurriculum.flatMap((unit, unitIndex) =>
@@ -921,6 +925,15 @@ export function ReadingApp() {
     setActiveTestId(null);
     setActiveExamId(null);
   };
+  const rememberSuccessfulLogin = (studentId: string) => {
+    if (rememberStudent) {
+      localStorage.setItem(REMEMBERED_STUDENT_KEY, studentId);
+      setRememberedStudentId(studentId);
+    } else {
+      localStorage.removeItem(REMEMBERED_STUDENT_KEY);
+      setRememberedStudentId("");
+    }
+  };
   const joinStudentProfile = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const code = studentCodeInput.toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -933,7 +946,7 @@ export function ReadingApp() {
           if (!stateResponse.ok) throw new Error("Your profile opened, but shared data could not be loaded. Please try again.");
           const state = await stateResponse.json() as { data?: Record<string, string> };
           if (state.data) applyRemoteClassroom(state.data);
-          if (joined.student?.id) selectStudent(joined.student.id);
+          if (joined.student?.id) { selectStudent(joined.student.id); rememberSuccessfulLogin(joined.student.id); }
           setCloudStatus("connected");
           setStudentCodeInput("");
           setStudentCodeError("");
@@ -942,7 +955,7 @@ export function ReadingApp() {
         const result = await response.json() as { error?: string };
         if (response.status === 503 && result.error?.includes("environment variables")) {
           const localStudent = students.find((profile) => profile.joinCode?.toUpperCase() === code);
-          if (localStudent) { selectStudent(localStudent.id); setStudentCodeInput(""); setStudentCodeError(""); return; }
+          if (localStudent) { selectStudent(localStudent.id); rememberSuccessfulLogin(localStudent.id); setStudentCodeInput(""); setStudentCodeError(""); return; }
         }
         throw new Error(result.error ?? "That code was not found. Check it with your teacher and try again.");
       } catch (error) {
@@ -1187,7 +1200,7 @@ export function ReadingApp() {
         </motion.header>
 
         <AnimatePresence mode="wait" initial={false}>
-    {teacherMode ? teacherAuthenticated ? <TeacherDashboard key="teacher-dashboard" students={students} assignments={assignments} tests={allTests} theme={classroomTheme} initialTab={currentTeacherTab} onTabChange={(tab) => navigateToPath(tab === "students" ? "/teacher" : `/teacher/${tab}`)} onAddStudent={addStudent} onDeleteStudent={deleteStudent} onUpdateStudentCode={updateStudentCode} onToggleStudentPhase={toggleStudentPhase} onCreateAssignments={createAssignments} onCreateTest={createTeacherTest} onPublishMaterial={publishTeacherTest} onUnpublishMaterial={unpublishTeacherTest} onUpdateMaterial={(testId, updates) => { const next = allTests.map((item) => item.id === testId ? { ...item, ...updates } : item); setAllTests(next); persistTeacherMaterials(next); }} onGradeAssignment={gradeAssignment} onTeachPointer={publishTeachingPointer} onBack={() => { publishTeachingPointer(null); void signOutTeacher(); }} /> : <TeacherLoginGate theme={classroomTheme} onCancel={() => navigateToPath("/")} onAuthenticated={() => setTeacherAuthenticated(true)} /> : studentPage === "home" ? <StudentHomePage studentName={selectedStudent?.name ?? "Student"} rememberMe={rememberStudent} theme={theme} code={studentCodeInput} error={studentCodeError} onCodeChange={(value) => { setStudentCodeInput(value); setStudentCodeError(""); }} onRememberChange={(value) => { setRememberStudent(value); localStorage.setItem("libaria-remember-student", String(value)); }} onSubmit={joinStudentProfile} onContinue={() => navigateToPath("/library")} onTeacherLogin={() => navigateToPath("/teacher")} /> : practiceSession ? <FlashcardPracticeView cards={practiceSession} theme={theme} onClose={() => { setPracticeSession(null); navigatePractice("home"); }} /> : activeTest ? <ReadingTestView key={activeTest.id + (activeExamId ?? "")} test={activeTest} theme={theme} preferences={preferences} exam={activeExam} studentId={selectedStudentId} draft={activeExam ? undefined : progress.testDrafts[activeTest.id]} notes={readingNotes} teacherPointer={teachingPointer} onDraftChange={persistTestDraft} onAddNote={addReadingNote} onUpdateNote={updateReadingNote} onBack={() => { navigateToPath(activeExamId ? "/exams" : "/library"); }} onComplete={(score, answers) => completeTest(activeTest, score, answers)} /> : studentPage === "exams" ? <StudentExamsPage assignments={assignments} tests={allTests} studentId={selectedStudentId} theme={theme} onOpenExam={beginExam} onBackToLibrary={() => navigateToPath("/library")} /> : active && current ? <motion.main key={"read-" + currentKey} initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -8 }} transition={{ type: "spring", stiffness: 280, damping: 30 }} className="mx-auto pb-16 pt-10" style={{ maxWidth: preferences.width === "narrow" ? 740 : 920 }}>
+    {teacherMode ? teacherAuthenticated ? <TeacherDashboard key="teacher-dashboard" students={students} assignments={assignments} tests={allTests} theme={classroomTheme} initialTab={currentTeacherTab} onTabChange={(tab) => navigateToPath(tab === "students" ? "/teacher" : `/teacher/${tab}`)} onAddStudent={addStudent} onDeleteStudent={deleteStudent} onUpdateStudentCode={updateStudentCode} onToggleStudentPhase={toggleStudentPhase} onCreateAssignments={createAssignments} onCreateTest={createTeacherTest} onPublishMaterial={publishTeacherTest} onUnpublishMaterial={unpublishTeacherTest} onUpdateMaterial={(testId, updates) => { const next = allTests.map((item) => item.id === testId ? { ...item, ...updates } : item); setAllTests(next); persistTeacherMaterials(next); }} onGradeAssignment={gradeAssignment} onTeachPointer={publishTeachingPointer} onBack={() => { publishTeachingPointer(null); void signOutTeacher(); }} /> : <TeacherLoginGate theme={classroomTheme} onCancel={() => navigateToPath("/")} onAuthenticated={() => setTeacherAuthenticated(true)} /> : studentPage === "home" ? <StudentHomePage studentName={rememberedStudent?.name ?? "Student"} rememberMe={rememberStudent && Boolean(rememberedStudent)} theme={theme} code={studentCodeInput} error={studentCodeError} onCodeChange={(value) => { setStudentCodeInput(value); setStudentCodeError(""); }} onRememberChange={(value) => { setRememberStudent(value); localStorage.setItem("libaria-remember-student", String(value)); if (!value) { localStorage.removeItem(REMEMBERED_STUDENT_KEY); setRememberedStudentId(""); } }} onSubmit={joinStudentProfile} onContinue={() => rememberedStudent && selectStudent(rememberedStudent.id)} onTeacherLogin={() => navigateToPath("/teacher")} /> : practiceSession ? <FlashcardPracticeView cards={practiceSession} theme={theme} onClose={() => { setPracticeSession(null); navigatePractice("home"); }} /> : activeTest ? <ReadingTestView key={activeTest.id + (activeExamId ?? "")} test={activeTest} theme={theme} preferences={preferences} exam={activeExam} studentId={selectedStudentId} draft={activeExam ? undefined : progress.testDrafts[activeTest.id]} notes={readingNotes} teacherPointer={teachingPointer} onDraftChange={persistTestDraft} onAddNote={addReadingNote} onUpdateNote={updateReadingNote} onBack={() => { navigateToPath(activeExamId ? "/exams" : "/library"); }} onComplete={(score, answers) => completeTest(activeTest, score, answers)} /> : studentPage === "exams" ? <StudentExamsPage assignments={assignments} tests={allTests} studentId={selectedStudentId} theme={theme} onOpenExam={beginExam} onBackToLibrary={() => navigateToPath("/library")} /> : active && current ? <motion.main key={"read-" + currentKey} initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -8 }} transition={{ type: "spring", stiffness: 280, damping: 30 }} className="mx-auto pb-16 pt-10" style={{ maxWidth: preferences.width === "narrow" ? 740 : 920 }}>
           <div className={preferences.focus ? "mb-10 text-center" : "mb-10"}>
             <p className="mb-3 text-xs font-bold uppercase tracking-[.18em]" style={{ color: theme.accent }}>{englishCurriculum[active.unit].title}</p>
             <h1 className="font-serif text-4xl font-semibold tracking-tight sm:text-5xl">{current.title}</h1>
