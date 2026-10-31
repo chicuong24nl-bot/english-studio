@@ -17,6 +17,17 @@ const NOTES_ENABLED = false;
 type Progress = StudentProgress;
 type PracticeStep = "home" | "test" | "section" | "setup";
 type TeacherTab = "students" | "materials" | "teach" | "exams" | "settings";
+const baseReadingTestIds = new Set(readingTests.map((test) => test.id));
+function mergeTeacherMaterials(saved: unknown): ReadingTest[] {
+  const savedTests = Array.isArray(saved) ? saved as ReadingTest[] : [];
+  return [
+    ...readingTests.map((test) => ({ ...test, status: "draft" as const, ...savedTests.find((stored) => stored.id === test.id) })),
+    ...savedTests.filter((test) => !baseReadingTestIds.has(test.id)),
+  ];
+}
+function persistTeacherMaterials(tests: ReadingTest[]) {
+  persistSharedClassroomValue(CUSTOM_TESTS_STORAGE_KEY, JSON.stringify(tests));
+}
 type DesignStyle = "brutalism" | "claymorphism" | "editorial" | "fiction" | "neobrutalism" | "vintage";
 type ShadowMode = "hard-offset" | "soft-elevation" | "pillowed-clay";
 type Preferences = { theme: "light" | "dark"; designStyle: DesignStyle; shadowMode: ShadowMode; font: "serif" | "sans" | "mono"; fontSize: number; lineHeight: "relaxed" | "spacious" | "compact"; width: "narrow" | "wide"; focus: boolean };
@@ -441,7 +452,7 @@ function StudentExamsPage({ assignments, tests, studentId, theme, onOpenExam, on
 export function ReadingApp() {
   const reduceMotion = useReducedMotion();
   const [progress, setProgress] = useState<Progress>(emptyProgress);
-  const [allTests, setAllTests] = useState<ReadingTest[]>(readingTests);
+  const [allTests, setAllTests] = useState<ReadingTest[]>(() => mergeTeacherMaterials([]));
   const [activePhase, setActivePhase] = useState<1 | 2 | 3 | 4>(1);
   const [preferences, setPreferences] = useState<Preferences>(defaults);
   const [active, setActive] = useState<{ unit: number; lesson: number } | null>(null);
@@ -493,8 +504,8 @@ export function ReadingApp() {
       const savedAssignments = localStorage.getItem(EXAMS_STORAGE_KEY);
       setAssignments(savedAssignments ? JSON.parse(savedAssignments) as ExamAssignment[] : []);
       const savedTests = localStorage.getItem(CUSTOM_TESTS_STORAGE_KEY);
-      const customTests = savedTests ? JSON.parse(savedTests) as ReadingTest[] : [];
-      setAllTests([...readingTests, ...(Array.isArray(customTests) ? customTests : [])]);
+      const savedMaterials = savedTests ? JSON.parse(savedTests) as ReadingTest[] : [];
+      setAllTests(mergeTeacherMaterials(savedMaterials));
       setTeachingPointer(() => {
         try {
           const raw = localStorage.getItem(TEACHING_POINTER_STORAGE_KEY);
@@ -672,8 +683,8 @@ export function ReadingApp() {
       if (rawAssignments) setAssignments(JSON.parse(rawAssignments));
       const rawCustomTests = localStorage.getItem(CUSTOM_TESTS_STORAGE_KEY);
       if (rawCustomTests) {
-        const customTests = JSON.parse(rawCustomTests);
-        if (Array.isArray(customTests)) setAllTests([...readingTests, ...customTests]);
+        const savedMaterials = JSON.parse(rawCustomTests);
+        setAllTests(mergeTeacherMaterials(savedMaterials));
       }
       const settings = localStorage.getItem(SETTINGS_KEY);
       if (settings) {
@@ -981,7 +992,7 @@ export function ReadingApp() {
     const draft = { ...test, status: "draft" as const };
     const next = [...allTests, draft];
     setAllTests(next);
-    persistSharedClassroomValue(CUSTOM_TESTS_STORAGE_KEY, JSON.stringify(next.filter((item) => item.id.startsWith("custom-"))));
+    persistTeacherMaterials(next);
   };
   const publishTeacherTest = (testId: string) => {
     const source = allTests.find((item) => item.id === testId);
@@ -989,7 +1000,7 @@ export function ReadingApp() {
     const published = { ...source, status: "published" as const };
     const nextTests = allTests.map((item) => item.id === testId ? published : item);
     setAllTests(nextTests);
-    persistSharedClassroomValue(CUSTOM_TESTS_STORAGE_KEY, JSON.stringify(nextTests.filter((item) => item.id.startsWith("custom-"))));
+    persistTeacherMaterials(nextTests);
     if (published.kind === "exam" || published.timedExam) {
       const targets = students.filter((student) => (published.visibility === "all" || published.visibility === "groups" && Boolean(student.groupName && published.groupNames?.includes(student.groupName)) || published.visibility === "students" && Boolean(published.studentIds?.includes(student.id))) && !assignments.some((assignment) => assignment.testId === testId && assignment.studentId === student.id));
       const startsAt = published.opensAt ?? new Date().toISOString();
@@ -1003,7 +1014,7 @@ export function ReadingApp() {
     const unpublished = { ...source, status: "draft" as const };
     const nextTests = allTests.map((item) => item.id === testId ? unpublished : item);
     setAllTests(nextTests);
-    persistSharedClassroomValue(CUSTOM_TESTS_STORAGE_KEY, JSON.stringify(nextTests.filter((item) => item.id.startsWith("custom-"))));
+    persistTeacherMaterials(nextTests);
   };
   const beginExam = (assignment: ExamAssignment) => {
     const now = new Date().toISOString();
@@ -1092,7 +1103,6 @@ export function ReadingApp() {
           <button onClick={closeSettings} aria-label="Close settings" className="rounded-full p-2 hover:bg-black/5"><X size={17} /></button>
         </div>
         <div className="space-y-5">
-          {!teacherMode && studentPage !== "home" && <section className="rounded-xl border p-3" style={{ borderColor: theme.border, background: theme.page }}><p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: theme.muted }}>Student profile</p><p className="mt-1 truncate text-sm font-semibold">{selectedStudent?.name ?? "Student"}</p>{selectedStudent?.joinCode && <p className="mt-0.5 font-mono text-xs tracking-wider" style={{ color: theme.muted }}>{selectedStudent.joinCode}</p>}<button type="button" onClick={() => { setSettingsOpen(false); setStudentCodeInput(""); setStudentCodeError(""); setActive(null); setActiveTestId(null); setActiveExamId(null); setPracticeSession(null); navigateToPath("/"); }} className="mt-3 min-h-10 w-full rounded-full border px-3 text-sm font-semibold" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}>Log out / switch student</button></section>}
            <fieldset><legend className="mb-2 text-xs font-bold uppercase tracking-wider" style={{ color: theme.muted }}>Design style</legend><div className="grid grid-cols-2 gap-2">
              {Object.entries(designStyles).map(([key, style]) => { const swatch = style[preferences.theme]; return <button key={key} type="button" aria-pressed={preferences.designStyle === key} onClick={() => savePreferences({ ...preferences, designStyle: key as DesignStyle })} className="rounded-xl border p-3 text-left transition-all hover:shadow-sm" style={{ borderColor: preferences.designStyle === key ? theme.accent : theme.border, background: swatch.surface, color: swatch.ink }}><span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full" style={{ background: swatch.accent }} /><strong className="text-sm">{style.name}</strong>{preferences.designStyle === key && <Check size={14} className="ml-auto" style={{ color: theme.accent }} />}</span><span className="mt-1 block text-[10px] leading-4" style={{ color: swatch.muted }}>{style.description}</span></button>; })}
            </div></fieldset>
@@ -1146,7 +1156,7 @@ export function ReadingApp() {
         </motion.header>
 
         <AnimatePresence mode="wait" initial={false}>
-    {teacherMode ? teacherAuthenticated ? <TeacherDashboard key="teacher-dashboard" students={students} assignments={assignments} tests={allTests} theme={classroomTheme} initialTab={currentTeacherTab} onTabChange={(tab) => navigateToPath(tab === "students" ? "/teacher" : `/teacher/${tab}`)} onAddStudent={addStudent} onUpdateStudentCode={updateStudentCode} onToggleStudentPhase={toggleStudentPhase} onCreateAssignments={createAssignments} onCreateTest={createTeacherTest} onPublishMaterial={publishTeacherTest} onUnpublishMaterial={unpublishTeacherTest} onUpdateMaterial={(testId, updates) => { const next = allTests.map((item) => item.id === testId ? { ...item, ...updates } : item); setAllTests(next); persistSharedClassroomValue(CUSTOM_TESTS_STORAGE_KEY, JSON.stringify(next.filter((item) => item.id.startsWith("custom-")))); }} onGradeAssignment={gradeAssignment} onTeachPointer={publishTeachingPointer} onBack={() => { publishTeachingPointer(null); void signOutTeacher(); }} /> : <TeacherLoginGate theme={classroomTheme} onCancel={() => navigateToPath("/")} onAuthenticated={() => setTeacherAuthenticated(true)} /> : studentPage === "home" ? <StudentHomePage studentName={selectedStudent?.name ?? "Student"} theme={theme} code={studentCodeInput} error={studentCodeError} onCodeChange={(value) => { setStudentCodeInput(value); setStudentCodeError(""); }} onSubmit={joinStudentProfile} onContinue={() => navigateToPath("/library")} onTeacherLogin={() => navigateToPath("/teacher")} /> : practiceSession ? <FlashcardPracticeView cards={practiceSession} theme={theme} onClose={() => { setPracticeSession(null); navigatePractice("home"); }} /> : activeTest ? <ReadingTestView key={activeTest.id + (activeExamId ?? "")} test={activeTest} theme={theme} preferences={preferences} exam={activeExam} studentId={selectedStudentId} draft={activeExam ? undefined : progress.testDrafts[activeTest.id]} notes={readingNotes} teacherPointer={teachingPointer} onDraftChange={persistTestDraft} onAddNote={addReadingNote} onUpdateNote={updateReadingNote} onBack={() => { navigateToPath(activeExamId ? "/exams" : "/library"); }} onComplete={(score, answers) => completeTest(activeTest, score, answers)} /> : studentPage === "exams" ? <StudentExamsPage assignments={assignments} tests={allTests} studentId={selectedStudentId} theme={theme} onOpenExam={beginExam} onBackToLibrary={() => navigateToPath("/library")} /> : active && current ? <motion.main key={"read-" + currentKey} initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -8 }} transition={{ type: "spring", stiffness: 280, damping: 30 }} className="mx-auto pb-16 pt-10" style={{ maxWidth: preferences.width === "narrow" ? 740 : 920 }}>
+    {teacherMode ? teacherAuthenticated ? <TeacherDashboard key="teacher-dashboard" students={students} assignments={assignments} tests={allTests} theme={classroomTheme} initialTab={currentTeacherTab} onTabChange={(tab) => navigateToPath(tab === "students" ? "/teacher" : `/teacher/${tab}`)} onAddStudent={addStudent} onUpdateStudentCode={updateStudentCode} onToggleStudentPhase={toggleStudentPhase} onCreateAssignments={createAssignments} onCreateTest={createTeacherTest} onPublishMaterial={publishTeacherTest} onUnpublishMaterial={unpublishTeacherTest} onUpdateMaterial={(testId, updates) => { const next = allTests.map((item) => item.id === testId ? { ...item, ...updates } : item); setAllTests(next); persistTeacherMaterials(next); }} onGradeAssignment={gradeAssignment} onTeachPointer={publishTeachingPointer} onBack={() => { publishTeachingPointer(null); void signOutTeacher(); }} /> : <TeacherLoginGate theme={classroomTheme} onCancel={() => navigateToPath("/")} onAuthenticated={() => setTeacherAuthenticated(true)} /> : studentPage === "home" ? <StudentHomePage studentName={selectedStudent?.name ?? "Student"} theme={theme} code={studentCodeInput} error={studentCodeError} onCodeChange={(value) => { setStudentCodeInput(value); setStudentCodeError(""); }} onSubmit={joinStudentProfile} onContinue={() => navigateToPath("/library")} onTeacherLogin={() => navigateToPath("/teacher")} /> : practiceSession ? <FlashcardPracticeView cards={practiceSession} theme={theme} onClose={() => { setPracticeSession(null); navigatePractice("home"); }} /> : activeTest ? <ReadingTestView key={activeTest.id + (activeExamId ?? "")} test={activeTest} theme={theme} preferences={preferences} exam={activeExam} studentId={selectedStudentId} draft={activeExam ? undefined : progress.testDrafts[activeTest.id]} notes={readingNotes} teacherPointer={teachingPointer} onDraftChange={persistTestDraft} onAddNote={addReadingNote} onUpdateNote={updateReadingNote} onBack={() => { navigateToPath(activeExamId ? "/exams" : "/library"); }} onComplete={(score, answers) => completeTest(activeTest, score, answers)} /> : studentPage === "exams" ? <StudentExamsPage assignments={assignments} tests={allTests} studentId={selectedStudentId} theme={theme} onOpenExam={beginExam} onBackToLibrary={() => navigateToPath("/library")} /> : active && current ? <motion.main key={"read-" + currentKey} initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -8 }} transition={{ type: "spring", stiffness: 280, damping: 30 }} className="mx-auto pb-16 pt-10" style={{ maxWidth: preferences.width === "narrow" ? 740 : 920 }}>
           <div className={preferences.focus ? "mb-10 text-center" : "mb-10"}>
             <p className="mb-3 text-xs font-bold uppercase tracking-[.18em]" style={{ color: theme.accent }}>{englishCurriculum[active.unit].title}</p>
             <h1 className="font-serif text-4xl font-semibold tracking-tight sm:text-5xl">{current.title}</h1>
