@@ -347,18 +347,18 @@ export function TeacherDashboard({
       animate={{ opacity: 1, y: 0 }}
       exit={reduceMotion ? undefined : { opacity: 0, y: -8 }}
       transition={{ type: "spring", stiffness: 280, damping: 30 }}
-      className="mx-auto w-full max-w-6xl space-y-8 pb-16 pt-8"
+      className="mx-auto w-full max-w-6xl space-y-6 pb-12 pt-5 sm:space-y-8 sm:pb-16 sm:pt-8"
     >
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="mb-2 text-xs font-bold uppercase tracking-[.18em]" style={{ color: theme.accent }}>Teacher workspace</p>
-          <h1 className="font-serif text-4xl font-semibold tracking-tight sm:text-5xl">Classroom</h1>
+          <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-5xl">Classroom</h1>
           <p className="mt-3 max-w-2xl leading-7" style={{ color: theme.muted }}>Manage {teacherSettings.classroomName}, assign individual reading exams, and review completed work.</p>
         </div>
         <button onClick={onBack} className="inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold transition hover:shadow-sm" style={{ borderColor: theme.border, background: theme.surface }}><ArrowLeft size={16} />Student view</button>
       </div>
-      <div className="grid grid-cols-2 gap-2 rounded-2xl border p-1.5 sm:grid-cols-5" style={{ borderColor: theme.border, background: theme.page }} role="tablist" aria-label="Teacher workspace">
-        {([{ id: "students", label: "Students", count: students.length }, { id: "materials", label: "Materials", count: tests.length }, { id: "teach", label: "Teach", count: teachableTests.length }, { id: "exams", label: "Exams & review", count: assignments.length }, { id: "settings", label: "Settings" }] as const).map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={activeTab === tab.id} onClick={() => { setActiveTab(tab.id); onTabChange?.(tab.id); }} className="flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold transition-colors" style={{ background: activeTab === tab.id ? theme.surface : "transparent", color: activeTab === tab.id ? theme.accent : theme.muted }}>{tab.id === "settings" && <Settings2 size={15} />}{tab.id === "teach" && <Presentation size={15} />}{tab.label}{"count" in tab && <span className="text-xs opacity-75">{tab.count}</span>}</button>)}
+      <div className="grid grid-cols-2 gap-1.5 rounded-2xl border p-1 sm:grid-cols-5 sm:gap-2 sm:p-1.5" style={{ borderColor: theme.border, background: theme.page }} role="tablist" aria-label="Teacher workspace">
+        {([{ id: "students", label: "Students", count: students.length }, { id: "materials", label: "Materials", count: tests.length }, { id: "teach", label: "Teach", count: teachableTests.length }, { id: "exams", label: "Exams & review", count: assignments.length }, { id: "settings", label: "Settings" }] as const).map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={activeTab === tab.id} onClick={() => { setActiveTab(tab.id); onTabChange?.(tab.id); }} className="flex min-h-11 min-w-0 items-center justify-center gap-1 rounded-xl px-1.5 text-xs font-semibold leading-tight transition-colors sm:gap-2 sm:px-3 sm:text-sm" style={{ background: activeTab === tab.id ? theme.surface : "transparent", color: activeTab === tab.id ? theme.accent : theme.muted }}>{tab.id === "settings" && <Settings2 size={15} />}{tab.id === "teach" && <Presentation size={15} />}{tab.label}{"count" in tab && <span className="text-xs opacity-75">{tab.count}</span>}</button>)}
       </div>
       {activeTab === "teach" && <section className="rounded-3xl border p-5 sm:p-7" style={cardStyle}>
         <div className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.16em]" style={{ color: theme.accent }}>Live reading lesson</p><h2 className="mt-1 font-serif text-2xl font-semibold">Teach a passage</h2><p className="mt-1 max-w-2xl text-sm leading-6" style={{ color: theme.muted }}>Choose a reading test and section. Move your cursor over the passage to point it out to students viewing that section.</p></div><button type="button" onClick={() => onTeachPointer(null)} className="rounded-full border px-3 py-2 text-xs font-semibold" style={{ borderColor: theme.border, color: theme.ink }}>Stop sharing cursor</button></div>
