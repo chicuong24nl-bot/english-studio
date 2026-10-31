@@ -781,8 +781,19 @@ export function ReadingApp() {
   const selectedVocabularyCount = readingVocabularyDecks.filter((deck) => practiceSections.includes(deck.section)).reduce((total, deck) => total + deck.cards.length, 0);
   const maxPracticeCards = Math.max(1, selectedVocabularyCount);
   const restoreAppRoute = () => {
-    const route = readPracticeLocation();
-    const segments = route.path.split("/").filter(Boolean).map((part) => decodeURIComponent(part));
+    let route = readPracticeLocation();
+    let segments = route.path.split("/").filter(Boolean).map((part) => decodeURIComponent(part));
+    const knownTeacherTabs = ["students", "materials", "teach", "exams", "settings"];
+    const knownStaticRoutes = ["/", "/library", "/profile", "/settings", "/teacher", "/teacher/style", "/exams", "/demo", "/practice", "/practice/tests", "/practice/sections", "/practice/setup", "/flashcards"];
+    const validRoute = knownStaticRoutes.includes(route.path)
+      || (segments[0] === "teacher" && segments.length === 2 && knownTeacherTabs.includes(segments[1]))
+      || (segments[0] === "reading" && segments.length === 2 && allTests.some((test) => test.id === segments[1]))
+      || (segments[0] === "exam" && segments.length === 2 && assignments.some((assignment) => assignment.id === segments[1]));
+    if (!validRoute) {
+      window.history.replaceState({}, "", "/");
+      route = readPracticeLocation();
+      segments = [];
+    }
     const isLegacyPracticeRoute = new URLSearchParams(window.location.search).has("practice");
     const isPracticeRoute = segments[0] === "practice" || isLegacyPracticeRoute;
     const teacherTabByPath: Record<string, TeacherTab> = { students: "students", materials: "materials", teach: "teach", exams: "exams", settings: "settings" };
