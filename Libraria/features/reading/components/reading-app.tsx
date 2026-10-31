@@ -13,7 +13,7 @@ import { collectLocalClassroomState, persistSharedClassroomValue } from "@/featu
 
 const LEGACY_STORAGE_KEY = "english-reader-progress";
 const SETTINGS_KEY = "english-reader-settings";
-const REMEMBERED_STUDENT_KEY = "libaria-remembered-student-id";
+const REMEMBERED_STUDENT_CODE_KEY = "libaria-remembered-student-code";
 const NOTES_ENABLED = false;
 type Progress = StudentProgress;
 type PracticeStep = "home" | "test" | "section" | "setup";
@@ -405,11 +405,11 @@ function ReadingTestView({ test, theme, preferences, exam, studentId, draft, not
   </motion.main>;
 }
 
-function StudentHomePage({ studentName, rememberMe, theme, code, error, onCodeChange, onRememberChange, onSubmit, onContinue, onTeacherLogin }: { studentName: string; rememberMe: boolean; theme: ReaderTheme; code: string; error: string; onCodeChange: (value: string) => void; onRememberChange: (value: boolean) => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onContinue: () => void; onTeacherLogin: () => void }) {
+function StudentHomePage({ rememberMe, theme, code, error, onCodeChange, onRememberChange, onSubmit, onTeacherLogin }: { rememberMe: boolean; theme: ReaderTheme; code: string; error: string; onCodeChange: (value: string) => void; onRememberChange: (value: boolean) => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onTeacherLogin: () => void }) {
   return <motion.main initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .28, ease: "easeOut" }} className="mx-auto flex min-h-[calc(100dvh-120px)] w-full max-w-5xl items-center justify-center py-10 sm:py-16">
     <section className="grid w-full overflow-hidden rounded-[2rem] border shadow-sm md:grid-cols-[1.1fr_.9fr]" style={{ borderColor: theme.border, background: theme.surface }}>
       <div className="flex flex-col justify-center p-6 sm:p-10 md:p-12"><p className="text-xs font-bold uppercase tracking-[.18em]" style={{ color: theme.accent }}>Libraria · Student home</p><h1 className="mt-3 max-w-xl font-serif text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">A calm place to read, learn, and grow.</h1><p className="mt-4 max-w-lg text-sm leading-7" style={{ color: theme.muted }}>Enter the 9-digit student code from your teacher to open your personal reading library and assigned exams.</p><form onSubmit={onSubmit} className="mt-7 max-w-md space-y-3"><label htmlFor="home-student-code" className="block text-xs font-bold uppercase tracking-wider" style={{ color: theme.muted }}>Your student code<input id="home-student-code" value={code} onChange={(event) => onCodeChange(event.target.value.replace(/\D/g, "").slice(0, 9))} maxLength={9} inputMode="numeric" autoComplete="off" placeholder="123456789" className="mt-2 h-14 w-full rounded-xl border px-4 font-mono text-lg font-bold tracking-[.25em] outline-none transition focus:ring-2" style={{ borderColor: theme.border, background: theme.page, color: theme.ink }} /></label><label className="inline-flex min-h-8 cursor-pointer items-center gap-2 text-sm" style={{ color: theme.ink }}><input type="checkbox" checked={rememberMe} onChange={(event) => onRememberChange(event.target.checked)} className="h-4 w-4 accent-current" />Remember me on this device</label>{error && <p role="alert" className="text-sm" style={{ color: theme.dark ? "#f0a0a5" : "#ad424c" }}>{error}</p>}<button type="submit" disabled={code.length !== 9} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-45" style={{ background: theme.accent, color: theme.onAccent }}>Open my profile <ArrowRight size={16} /></button></form><p className="mt-4 text-xs" style={{ color: theme.muted }}>No code yet? Ask your teacher to create your student profile.</p></div>
-      <div className="flex flex-col justify-between gap-8 border-t p-6 sm:p-10 md:border-l md:border-t-0" style={{ borderColor: theme.border, background: theme.page }}><div><div className="grid h-12 w-12 place-items-center rounded-2xl" style={{ background: theme.accent, color: theme.onAccent }}><BookOpen size={22} /></div><p className="mt-8 text-xs font-bold uppercase tracking-[.16em]" style={{ color: theme.accent }}>Your learning, together</p><h2 className="mt-2 font-serif text-2xl font-semibold">One profile. All your progress.</h2><p className="mt-3 text-sm leading-6" style={{ color: theme.muted }}>Your teacher’s reading materials, exam assignments, and reviewed results stay organized under your name.</p></div><div className="space-y-3">{rememberMe && <div className="rounded-2xl border p-4" style={{ borderColor: theme.border, background: theme.surface }}><p className="text-xs font-semibold" style={{ color: theme.muted }}>Already using this device?</p><button type="button" onClick={onContinue} className="mt-2 inline-flex min-h-10 w-full items-center justify-between gap-2 rounded-xl border px-3 text-sm font-semibold" style={{ borderColor: theme.border, color: theme.ink }}>Continue as <span className="truncate font-bold" style={{ color: theme.accent }}>{studentName}</span><ArrowRight size={15} className="shrink-0" /></button></div>}<button type="button" onClick={onTeacherLogin} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border px-4 text-sm font-semibold transition hover:shadow-sm" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}><LockKeyhole size={15} />Teacher sign in</button></div></div>
+      <div className="flex flex-col justify-between gap-8 border-t p-6 sm:p-10 md:border-l md:border-t-0" style={{ borderColor: theme.border, background: theme.page }}><div><div className="grid h-12 w-12 place-items-center rounded-2xl" style={{ background: theme.accent, color: theme.onAccent }}><BookOpen size={22} /></div><p className="mt-8 text-xs font-bold uppercase tracking-[.16em]" style={{ color: theme.accent }}>Your learning, together</p><h2 className="mt-2 font-serif text-2xl font-semibold">One profile. All your progress.</h2><p className="mt-3 text-sm leading-6" style={{ color: theme.muted }}>Your teacher’s reading materials, exam assignments, and reviewed results stay organized under your name.</p></div><button type="button" onClick={onTeacherLogin} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border px-4 text-sm font-semibold transition hover:shadow-sm" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}><LockKeyhole size={15} />Teacher sign in</button></div>
     </section>
   </motion.main>;
 }
@@ -470,7 +470,6 @@ export function ReadingApp() {
   const [studentCodeInput, setStudentCodeInput] = useState("");
   const [studentCodeError, setStudentCodeError] = useState("");
   const [rememberStudent, setRememberStudent] = useState(false);
-  const [rememberedStudentId, setRememberedStudentId] = useState("");
   const [assignments, setAssignments] = useState<ExamAssignment[]>([]);
   const [readingNotes, setReadingNotes] = useState<ReadingNote[]>([]);
   const [teacherMode, setTeacherMode] = useState(false);
@@ -651,7 +650,7 @@ export function ReadingApp() {
   useEffect(() => {
     try {
       setRememberStudent(localStorage.getItem("libaria-remember-student") === "true");
-      setRememberedStudentId(localStorage.getItem(REMEMBERED_STUDENT_KEY) ?? "");
+      localStorage.removeItem("libaria-remembered-student-id");
       const storedStudents = localStorage.getItem(STUDENTS_STORAGE_KEY);
       const parsedRoster: Array<Partial<StudentProfile>> = storedStudents ? JSON.parse(storedStudents) : [];
       const usedCodes: string[] = [];
@@ -706,6 +705,11 @@ export function ReadingApp() {
   }, []);
 
   useEffect(() => {
+    if (studentPage !== "home") return;
+    setStudentCodeInput(rememberStudent ? localStorage.getItem(REMEMBERED_STUDENT_CODE_KEY) ?? "" : "");
+  }, [studentPage, rememberStudent]);
+
+  useEffect(() => {
     const interval = window.setInterval(() => setClockNow(Date.now()), 15_000);
     return () => window.clearInterval(interval);
   }, []);
@@ -740,7 +744,6 @@ export function ReadingApp() {
   const activeTest = allTests.find((test) => test.id === activeTestId) ?? null;
   const activeExam = assignments.find((assignment) => assignment.id === activeExamId) ?? null;
   const selectedStudent = students.find((student) => student.id === selectedStudentId);
-  const rememberedStudent = students.find((student) => student.id === rememberedStudentId);
   const unlockedPhases = selectedStudent?.unlockedPhases ?? [1];
   const currentKey = active ? active.unit + "-" + active.lesson : "";
   const lessons = useMemo(() => englishCurriculum.flatMap((unit, unitIndex) =>
@@ -925,13 +928,11 @@ export function ReadingApp() {
     setActiveTestId(null);
     setActiveExamId(null);
   };
-  const rememberSuccessfulLogin = (studentId: string) => {
+  const rememberSuccessfulLogin = (code: string) => {
     if (rememberStudent) {
-      localStorage.setItem(REMEMBERED_STUDENT_KEY, studentId);
-      setRememberedStudentId(studentId);
+      localStorage.setItem(REMEMBERED_STUDENT_CODE_KEY, code);
     } else {
-      localStorage.removeItem(REMEMBERED_STUDENT_KEY);
-      setRememberedStudentId("");
+      localStorage.removeItem(REMEMBERED_STUDENT_CODE_KEY);
     }
   };
   const joinStudentProfile = (event: FormEvent<HTMLFormElement>) => {
@@ -946,7 +947,7 @@ export function ReadingApp() {
           if (!stateResponse.ok) throw new Error("Your profile opened, but shared data could not be loaded. Please try again.");
           const state = await stateResponse.json() as { data?: Record<string, string> };
           if (state.data) applyRemoteClassroom(state.data);
-          if (joined.student?.id) { selectStudent(joined.student.id); rememberSuccessfulLogin(joined.student.id); }
+          if (joined.student?.id) { selectStudent(joined.student.id); rememberSuccessfulLogin(code); }
           setCloudStatus("connected");
           setStudentCodeInput("");
           setStudentCodeError("");
@@ -955,7 +956,7 @@ export function ReadingApp() {
         const result = await response.json() as { error?: string };
         if (response.status === 503 && result.error?.includes("environment variables")) {
           const localStudent = students.find((profile) => profile.joinCode?.toUpperCase() === code);
-          if (localStudent) { selectStudent(localStudent.id); rememberSuccessfulLogin(localStudent.id); setStudentCodeInput(""); setStudentCodeError(""); return; }
+          if (localStudent) { selectStudent(localStudent.id); rememberSuccessfulLogin(code); setStudentCodeInput(""); setStudentCodeError(""); return; }
         }
         throw new Error(result.error ?? "That code was not found. Check it with your teacher and try again.");
       } catch (error) {
@@ -1200,7 +1201,7 @@ export function ReadingApp() {
         </motion.header>
 
         <AnimatePresence mode="wait" initial={false}>
-    {teacherMode ? teacherAuthenticated ? <TeacherDashboard key="teacher-dashboard" students={students} assignments={assignments} tests={allTests} theme={classroomTheme} initialTab={currentTeacherTab} onTabChange={(tab) => navigateToPath(tab === "students" ? "/teacher" : `/teacher/${tab}`)} onAddStudent={addStudent} onDeleteStudent={deleteStudent} onUpdateStudentCode={updateStudentCode} onToggleStudentPhase={toggleStudentPhase} onCreateAssignments={createAssignments} onCreateTest={createTeacherTest} onPublishMaterial={publishTeacherTest} onUnpublishMaterial={unpublishTeacherTest} onUpdateMaterial={(testId, updates) => { const next = allTests.map((item) => item.id === testId ? { ...item, ...updates } : item); setAllTests(next); persistTeacherMaterials(next); }} onGradeAssignment={gradeAssignment} onTeachPointer={publishTeachingPointer} onBack={() => { publishTeachingPointer(null); void signOutTeacher(); }} /> : <TeacherLoginGate theme={classroomTheme} onCancel={() => navigateToPath("/")} onAuthenticated={() => setTeacherAuthenticated(true)} /> : studentPage === "home" ? <StudentHomePage studentName={rememberedStudent?.name ?? "Student"} rememberMe={rememberStudent && Boolean(rememberedStudent)} theme={theme} code={studentCodeInput} error={studentCodeError} onCodeChange={(value) => { setStudentCodeInput(value); setStudentCodeError(""); }} onRememberChange={(value) => { setRememberStudent(value); localStorage.setItem("libaria-remember-student", String(value)); if (!value) { localStorage.removeItem(REMEMBERED_STUDENT_KEY); setRememberedStudentId(""); } }} onSubmit={joinStudentProfile} onContinue={() => rememberedStudent && selectStudent(rememberedStudent.id)} onTeacherLogin={() => navigateToPath("/teacher")} /> : practiceSession ? <FlashcardPracticeView cards={practiceSession} theme={theme} onClose={() => { setPracticeSession(null); navigatePractice("home"); }} /> : activeTest ? <ReadingTestView key={activeTest.id + (activeExamId ?? "")} test={activeTest} theme={theme} preferences={preferences} exam={activeExam} studentId={selectedStudentId} draft={activeExam ? undefined : progress.testDrafts[activeTest.id]} notes={readingNotes} teacherPointer={teachingPointer} onDraftChange={persistTestDraft} onAddNote={addReadingNote} onUpdateNote={updateReadingNote} onBack={() => { navigateToPath(activeExamId ? "/exams" : "/library"); }} onComplete={(score, answers) => completeTest(activeTest, score, answers)} /> : studentPage === "exams" ? <StudentExamsPage assignments={assignments} tests={allTests} studentId={selectedStudentId} theme={theme} onOpenExam={beginExam} onBackToLibrary={() => navigateToPath("/library")} /> : active && current ? <motion.main key={"read-" + currentKey} initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -8 }} transition={{ type: "spring", stiffness: 280, damping: 30 }} className="mx-auto pb-16 pt-10" style={{ maxWidth: preferences.width === "narrow" ? 740 : 920 }}>
+    {teacherMode ? teacherAuthenticated ? <TeacherDashboard key="teacher-dashboard" students={students} assignments={assignments} tests={allTests} theme={classroomTheme} initialTab={currentTeacherTab} onTabChange={(tab) => navigateToPath(tab === "students" ? "/teacher" : `/teacher/${tab}`)} onAddStudent={addStudent} onDeleteStudent={deleteStudent} onUpdateStudentCode={updateStudentCode} onToggleStudentPhase={toggleStudentPhase} onCreateAssignments={createAssignments} onCreateTest={createTeacherTest} onPublishMaterial={publishTeacherTest} onUnpublishMaterial={unpublishTeacherTest} onUpdateMaterial={(testId, updates) => { const next = allTests.map((item) => item.id === testId ? { ...item, ...updates } : item); setAllTests(next); persistTeacherMaterials(next); }} onGradeAssignment={gradeAssignment} onTeachPointer={publishTeachingPointer} onBack={() => { publishTeachingPointer(null); void signOutTeacher(); }} /> : <TeacherLoginGate theme={classroomTheme} onCancel={() => navigateToPath("/")} onAuthenticated={() => setTeacherAuthenticated(true)} /> : studentPage === "home" ? <StudentHomePage rememberMe={rememberStudent} theme={theme} code={studentCodeInput} error={studentCodeError} onCodeChange={(value) => { setStudentCodeInput(value); setStudentCodeError(""); }} onRememberChange={(value) => { setRememberStudent(value); localStorage.setItem("libaria-remember-student", String(value)); if (!value) { localStorage.removeItem(REMEMBERED_STUDENT_CODE_KEY); setStudentCodeInput(""); } }} onSubmit={joinStudentProfile} onTeacherLogin={() => navigateToPath("/teacher")} /> : practiceSession ? <FlashcardPracticeView cards={practiceSession} theme={theme} onClose={() => { setPracticeSession(null); navigatePractice("home"); }} /> : activeTest ? <ReadingTestView key={activeTest.id + (activeExamId ?? "")} test={activeTest} theme={theme} preferences={preferences} exam={activeExam} studentId={selectedStudentId} draft={activeExam ? undefined : progress.testDrafts[activeTest.id]} notes={readingNotes} teacherPointer={teachingPointer} onDraftChange={persistTestDraft} onAddNote={addReadingNote} onUpdateNote={updateReadingNote} onBack={() => { navigateToPath(activeExamId ? "/exams" : "/library"); }} onComplete={(score, answers) => completeTest(activeTest, score, answers)} /> : studentPage === "exams" ? <StudentExamsPage assignments={assignments} tests={allTests} studentId={selectedStudentId} theme={theme} onOpenExam={beginExam} onBackToLibrary={() => navigateToPath("/library")} /> : active && current ? <motion.main key={"read-" + currentKey} initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -8 }} transition={{ type: "spring", stiffness: 280, damping: 30 }} className="mx-auto pb-16 pt-10" style={{ maxWidth: preferences.width === "narrow" ? 740 : 920 }}>
           <div className={preferences.focus ? "mb-10 text-center" : "mb-10"}>
             <p className="mb-3 text-xs font-bold uppercase tracking-[.18em]" style={{ color: theme.accent }}>{englishCurriculum[active.unit].title}</p>
             <h1 className="font-serif text-4xl font-semibold tracking-tight sm:text-5xl">{current.title}</h1>
