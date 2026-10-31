@@ -19,7 +19,12 @@ export default function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  return new NextResponse("Not found", { status: 404 });
+  // Keep missing API endpoints as 404s, but send unknown app pages home.
+  if (pathname.startsWith("/api/")) {
+    return new NextResponse("Not found", { status: 404 });
+  }
+
+  return NextResponse.redirect(new URL("/", request.url), 307);
 }
 
 export const config = {
