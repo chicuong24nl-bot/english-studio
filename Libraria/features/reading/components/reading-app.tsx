@@ -16,6 +16,7 @@ const SETTINGS_KEY = "english-reader-settings";
 const NOTES_ENABLED = false;
 type Progress = StudentProgress;
 type PracticeStep = "home" | "test" | "section" | "setup";
+type TeacherTab = "students" | "materials" | "teach" | "exams" | "settings";
 type DesignStyle = "brutalism" | "claymorphism" | "editorial" | "fiction" | "neobrutalism" | "vintage";
 type ShadowMode = "hard-offset" | "soft-elevation" | "pillowed-clay";
 type Preferences = { theme: "light" | "dark"; designStyle: DesignStyle; shadowMode: ShadowMode; font: "serif" | "sans" | "mono"; fontSize: number; lineHeight: "relaxed" | "spacious" | "compact"; width: "narrow" | "wide"; focus: boolean };
@@ -72,6 +73,7 @@ function timeAgo(timestamp: string | undefined, now: number) {
 }
 
 function readPracticeLocation() {
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
   const params = new URLSearchParams(window.location.search);
   const route = params.get("practice");
   const steps: Record<string, PracticeStep> = {
@@ -79,16 +81,36 @@ function readPracticeLocation() {
     "choose-section": "section",
     "deck-setup": "setup",
   };
-  const step = steps[route ?? ""] ?? "home";
+  const pathSteps: Record<string, PracticeStep> = {
+    "/practice/tests": "test",
+    "/practice/sections": "section",
+    "/practice/setup": "setup",
+  };
+  const step = pathSteps[path] ?? steps[route ?? ""] ?? "home";
   const rawSections = params.get("sections");
   const sectionValues = rawSections === null ? [1] : rawSections.split(",").map(Number).filter((section) => Number.isInteger(section) && section > 0);
   const count = Number(params.get("count"));
   return {
     step,
+    path,
     testId: params.get("test") ?? "",
     sections: [...new Set(sectionValues)],
     count: Number.isInteger(count) && count > 0 ? count : 12,
   };
+}
+
+function buildPracticeCards(sections: number[], count: number): PracticeCard[] {
+  const selectedDecks = readingVocabularyDecks.filter((deck) => sections.includes(deck.section));
+  const maxCards = Math.max(0, ...selectedDecks.map((deck) => deck.cards.length));
+  const deck = Array.from({ length: maxCards }, (_, index) => selectedDecks.flatMap((section) => section.cards[index] ? [{ ...section.cards[index], sectionTitle: section.title }] : [])).flat();
+  return deck.slice(0, Math.min(count, deck.length)).map((item, index) => ({
+    questionNumber: index + 1,
+    prompt: item.term,
+    options: [],
+    optionLabels: "plain" as const,
+    answer: item.meaning,
+    explanation: [item.sectionTitle, item.example ? `Example: “${item.example}”` : item.kind === "collocation" ? "Collocation" : "Academic vocabulary"].join(" · "),
+  }));
 }
 
 function questionGroupInstructions(test: ReadingTest, questionIndex: number) {
@@ -487,19 +509,6 @@ export function ReadingApp() {
   };
 
   useEffect(() => {
-    const restoreFromUrl = () => {
-      const route = readPracticeLocation();
-      setPracticeStep(route.step);
-      if (route.testId) setSelectedPracticeTestId(route.testId);
-      setPracticeSections(route.sections);
-      setPracticeQuestionCount(route.count);
-    };
-    restoreFromUrl();
-    window.addEventListener("popstate", restoreFromUrl);
-    return () => window.removeEventListener("popstate", restoreFromUrl);
-  }, []);
-
-  useEffect(() => {
     let active = true;
     fetch("/api/teacher-session", { cache: "no-store" })
       .then((response) => response.ok ? response.json() as Promise<{ authenticated?: boolean }> : null)
@@ -593,6 +602,7 @@ export function ReadingApp() {
     try { await fetch("/api/teacher-session", { method: "DELETE" }); } catch { /* The session cookie expires if the request cannot reach the server. */ }
     setTeacherAuthenticated(false);
     setTeacherMode(false);
+    navigateToPath("/library");
   };
 
   useEffect(() => {
@@ -750,6 +760,83 @@ export function ReadingApp() {
   const practiceStageIndex = ({ home: 0, test: 1, section: 2, setup: 3 } as const)[practiceStep];
   const selectedVocabularyCount = readingVocabularyDecks.filter((deck) => practiceSections.includes(deck.section)).reduce((total, deck) => total + deck.cards.length, 0);
   const maxPracticeCards = Math.max(1, selectedVocabularyCount);
+  const restoreAppRoute = () => {
+    const route = readPracticeLocation();
+    const segments = route.path.split("/").filter(Boolean).map((part) => decodeURIComponent(part));
+    const isLegacyPracticeRoute = new URLSearchParams(window.location.search).has("practice");
+    const isPracticeRoute = segments[0] === "practice" || isLegacyPracticeRoute;
+    const teacherTabByPath: Record<string, TeacherTab> = { students: "students", materials: "materials", teach: "teach", exams: "exams", settings: "settings" };
+
+    setPracticeStep(isPracticeRoute ? route.step : "home");
+    if (route.testId) setSelectedPracticeTestId(route.testId);
+    setPracticeSections(route.sections);
+    setPracticeQuestionCount(route.count);
+    setActive(null);
+    setSettingsOpen(route.path === "/settings" || route.path === "/teacher/style");
+    setProfileOpen(route.path === "/profile");
+    setTeacherMode(segments[0] === "teacher");
+    if (route.path === "/flashcards") {
+      setStudentPage("library");
+      setPracticeSession(buildPracticeCards(route.sections, route.count));
+      setActiveTestId(null);
+      setActiveExamId(null);
+      return;
+    }
+    setPracticeSession(null);
+    if (segments[0] === "reading" && segments[1]) {
+      setStudentPage("library");
+      setActiveTestId(segments[1]);
+      setActiveExamId(null);
+      return;
+    }
+    if (segments[0] === "exam" && segments[1]) {
+      setStudentPage("library");
+      setActiveExamId(segments[1]);
+      setActiveTestId(assignments.find((assignment) => assignment.id === segments[1])?.testId ?? null);
+      return;
+    }
+    setActiveExamId(null);
+    setActiveTestId(null);
+    if (segments[0] === "teacher") {
+      setStudentPage("library");
+    } else if (isPracticeRoute || route.path === "/library" || route.path === "/settings" || route.path === "/profile" || route.path === "/demo") {
+      setStudentPage("library");
+    } else if (route.path === "/exams") {
+      setStudentPage("exams");
+    } else {
+      setStudentPage("home");
+    }
+    return teacherTabByPath[segments[1] ?? ""] ?? "students";
+  };
+  const navigateToPath = (path: string, replace = false) => {
+    const target = new URL(path, window.location.origin);
+    window.history[replace ? "replaceState" : "pushState"]({}, "", target);
+    restoreAppRoute();
+  };
+  const openSettings = () => {
+    const returnTo = window.location.pathname + window.location.search;
+    navigateToPath(`${teacherMode ? "/teacher/style" : "/settings"}?returnTo=${encodeURIComponent(returnTo)}`);
+  };
+  const closeSettings = () => {
+    const returnTo = new URLSearchParams(window.location.search).get("returnTo") || "/library";
+    navigateToPath(returnTo);
+  };
+  const currentTeacherTab = (() => {
+    const segment = typeof window === "undefined" ? "" : window.location.pathname.split("/").filter(Boolean)[1] ?? "";
+    return ({ students: "students", materials: "materials", teach: "teach", exams: "exams", settings: "settings" } as Record<string, TeacherTab>)[segment] ?? "students";
+  })();
+  useEffect(() => {
+    const restoreFromUrl = () => { restoreAppRoute(); };
+    restoreFromUrl();
+    window.addEventListener("popstate", restoreFromUrl);
+    return () => window.removeEventListener("popstate", restoreFromUrl);
+  }, []);
+  useEffect(() => {
+    if (!activeExamId) return;
+    const assignment = assignments.find((item) => item.id === activeExamId);
+    if (assignment && assignment.testId !== activeTestId) setActiveTestId(assignment.testId);
+  }, [activeExamId, activeTestId, assignments]);
+
   const navigatePractice = (step: PracticeStep, options: { testId?: string; sections?: number[]; count?: number; replace?: boolean } = {}) => {
     const nextTestId = options.testId ?? selectedPracticeTest?.id ?? selectedPracticeTestId;
     const nextSections = options.sections ?? practiceSections;
@@ -759,10 +846,8 @@ export function ReadingApp() {
     if (options.sections) setPracticeSections(options.sections);
     if (options.count !== undefined) setPracticeQuestionCount(options.count);
 
-    const url = new URL(window.location.href);
-    for (const key of ["practice", "test", "sections", "count"]) url.searchParams.delete(key);
+    const url = new URL(step === "home" ? "/practice" : step === "test" ? "/practice/tests" : step === "section" ? "/practice/sections" : "/practice/setup", window.location.origin);
     if (step !== "home") {
-      url.searchParams.set("practice", step === "test" ? "choose-test" : step === "section" ? "choose-section" : "deck-setup");
       if (step === "section" || step === "setup") {
         if (nextTestId) url.searchParams.set("test", nextTestId);
         url.searchParams.set("sections", nextSections.join(","));
@@ -770,6 +855,7 @@ export function ReadingApp() {
       if (step === "setup") url.searchParams.set("count", String(Math.min(nextCount, Math.max(1, selectedVocabularyCount || maxPracticeCards))));
     }
     window.history[options.replace ? "replaceState" : "pushState"]({}, "", url);
+    setStudentPage("library");
   };
   const words = current?.reading.split(/\s+/).filter(Boolean).length ?? 0;
   const minutes = Math.max(1, Math.ceil(words / 180));
@@ -807,7 +893,7 @@ export function ReadingApp() {
   }, [selectedStudentId]);
   const selectStudent = (studentId: string) => {
     setSelectedStudentId(studentId);
-    setStudentPage("library");
+    navigateToPath("/library");
     setActivePhase(1);
     localStorage.setItem(SELECTED_STUDENT_STORAGE_KEY, studentId);
     setProgress(readStudentProgress(studentId));
@@ -931,6 +1017,7 @@ export function ReadingApp() {
     setActive(null);
     setActiveExamId(assignment.id);
     setActiveTestId(assignment.testId);
+    navigateToPath(`/exam/${encodeURIComponent(assignment.id)}`);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const completeAssignment = (assignmentId: string, answers: Record<number, number | string>, questionPoints?: Record<number, number>) => {
@@ -974,6 +1061,7 @@ export function ReadingApp() {
     setActive(null);
     setActiveTestId(test.id);
     setSettingsOpen(false);
+    navigateToPath(`/reading/${encodeURIComponent(test.id)}`);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const completeTest = (test: ReadingTest, score: number, answers: Record<number, number | string>) => {
@@ -994,17 +1082,17 @@ export function ReadingApp() {
 
   const Settings = (
     <div className="relative">
-      <button onClick={() => setSettingsOpen(!settingsOpen)} aria-expanded={settingsOpen} className="inline-flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-bold transition hover:shadow-sm" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}>
+      <button onClick={() => settingsOpen ? closeSettings() : openSettings()} aria-expanded={settingsOpen} className="inline-flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-bold transition hover:shadow-sm" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}>
         <Settings2 size={17} /> Settings <ChevronDown size={15} />
       </button>
       <AnimatePresence>
       {settingsOpen && <motion.div key="reading-settings" initial={reduceMotion ? false : { opacity: 0, y: -8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduceMotion ? undefined : { opacity: 0, y: -5, scale: 0.98 }} transition={{ type: "spring", stiffness: 420, damping: 32 }} className="absolute right-0 top-14 z-20 max-h-[calc(100dvh-6rem)] w-[min(340px,calc(100vw-2rem))] overflow-y-auto overscroll-contain rounded-2xl border p-5 shadow-xl" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}>
         <div className="mb-4 flex items-center justify-between">
           <div><p className="font-extrabold">{teacherMode ? "Display settings" : "Reading settings"}</p><p className="text-xs" style={{ color: theme.muted }}>{teacherMode ? "Choose the look and reading comfort for the app" : "Make the page comfortable for you"}</p></div>
-          <button onClick={() => setSettingsOpen(false)} aria-label="Close settings" className="rounded-full p-2 hover:bg-black/5"><X size={17} /></button>
+          <button onClick={closeSettings} aria-label="Close settings" className="rounded-full p-2 hover:bg-black/5"><X size={17} /></button>
         </div>
         <div className="space-y-5">
-          {!teacherMode && studentPage !== "home" && <section className="rounded-xl border p-3" style={{ borderColor: theme.border, background: theme.page }}><p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: theme.muted }}>Student profile</p><p className="mt-1 truncate text-sm font-semibold">{selectedStudent?.name ?? "Student"}</p>{selectedStudent?.joinCode && <p className="mt-0.5 font-mono text-xs tracking-wider" style={{ color: theme.muted }}>{selectedStudent.joinCode}</p>}<button type="button" onClick={() => { setSettingsOpen(false); setStudentCodeInput(""); setStudentCodeError(""); setActive(null); setActiveTestId(null); setActiveExamId(null); setPracticeSession(null); navigatePractice("home"); setStudentPage("home"); }} className="mt-3 min-h-10 w-full rounded-full border px-3 text-sm font-semibold" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}>Log out / switch student</button></section>}
+          {!teacherMode && studentPage !== "home" && <section className="rounded-xl border p-3" style={{ borderColor: theme.border, background: theme.page }}><p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: theme.muted }}>Student profile</p><p className="mt-1 truncate text-sm font-semibold">{selectedStudent?.name ?? "Student"}</p>{selectedStudent?.joinCode && <p className="mt-0.5 font-mono text-xs tracking-wider" style={{ color: theme.muted }}>{selectedStudent.joinCode}</p>}<button type="button" onClick={() => { setSettingsOpen(false); setStudentCodeInput(""); setStudentCodeError(""); setActive(null); setActiveTestId(null); setActiveExamId(null); setPracticeSession(null); navigateToPath("/"); }} className="mt-3 min-h-10 w-full rounded-full border px-3 text-sm font-semibold" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}>Log out / switch student</button></section>}
            <fieldset><legend className="mb-2 text-xs font-bold uppercase tracking-wider" style={{ color: theme.muted }}>Design style</legend><div className="grid grid-cols-2 gap-2">
              {Object.entries(designStyles).map(([key, style]) => { const swatch = style[preferences.theme]; return <button key={key} type="button" aria-pressed={preferences.designStyle === key} onClick={() => savePreferences({ ...preferences, designStyle: key as DesignStyle })} className="rounded-xl border p-3 text-left transition-all hover:shadow-sm" style={{ borderColor: preferences.designStyle === key ? theme.accent : theme.border, background: swatch.surface, color: swatch.ink }}><span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full" style={{ background: swatch.accent }} /><strong className="text-sm">{style.name}</strong>{preferences.designStyle === key && <Check size={14} className="ml-auto" style={{ color: theme.accent }} />}</span><span className="mt-1 block text-[10px] leading-4" style={{ color: swatch.muted }}>{style.description}</span></button>; })}
            </div></fieldset>
@@ -1044,13 +1132,13 @@ export function ReadingApp() {
           style={{ borderColor: frameTheme.border, background: frameTheme.page + "e8", pointerEvents: headerVisible || settingsOpen ? "auto" : "none" }}
         >
           <div className="flex items-center gap-3">
-            {active || activeTest ? <button onClick={() => { setActive(null); setActiveTestId(null); setActiveExamId(null); setStudentPage("library"); }} className="inline-flex items-center gap-2 rounded-full p-2 pr-3 text-sm font-bold transition hover:bg-black/5"><ArrowLeft size={18} /><span>Library</span></button> : <button type="button" onClick={() => { setActive(null); setActiveTestId(null); setActiveExamId(null); setPracticeSession(null); navigatePractice("home"); setStudentPage("home"); setTeacherMode(false); }} className="flex items-center gap-2 text-lg font-black tracking-tight"><span className="grid h-9 w-9 place-items-center rounded-xl" style={{ background: frameTheme.accent, color: frameTheme.ink }}><BookOpen size={19} /></span>Libraria</button>}
+            {active || activeTest ? <button onClick={() => { setActive(null); navigateToPath(activeExamId ? "/exams" : "/library"); }} className="inline-flex items-center gap-2 rounded-full p-2 pr-3 text-sm font-bold transition hover:bg-black/5"><ArrowLeft size={18} /><span>Library</span></button> : <button type="button" onClick={() => { setActive(null); setActiveTestId(null); setActiveExamId(null); setPracticeSession(null); navigateToPath("/"); }} className="flex items-center gap-2 text-lg font-black tracking-tight"><span className="grid h-9 w-9 place-items-center rounded-xl" style={{ background: frameTheme.accent, color: frameTheme.ink }}><BookOpen size={19} /></span>Libraria</button>}
             {(active || activeTest) && !preferences.focus && <span className="hidden text-sm sm:inline" style={{ color: frameTheme.muted }}>Libraria <span className="mx-1">/</span>{activeTest?.title ?? current?.title}</span>}
           </div>
           {!teacherMode && <div className="flex items-center gap-2">
             <div className="relative">
-              <button type="button" aria-expanded={profileOpen} aria-haspopup="menu" onClick={() => { setProfileOpen((open) => !open); setSettingsOpen(false); }} className="inline-flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition" style={{ borderColor: frameTheme.border, background: frameTheme.surface, color: frameTheme.ink }}><UserRound size={16} /><span className="max-w-32 truncate">{selectedStudent?.name ?? "My profile"}</span><ChevronDown size={14} /></button>
-              <AnimatePresence>{profileOpen && <motion.div role="menu" initial={reduceMotion ? false : { opacity: 0, y: -5, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduceMotion ? undefined : { opacity: 0, y: -4 }} className="absolute right-0 top-14 z-30 w-60 rounded-2xl border p-3 shadow-xl" style={{ borderColor: frameTheme.border, background: frameTheme.surface, color: frameTheme.ink }}><p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: frameTheme.muted }}>Student profile</p><p className="truncate px-2 text-sm font-semibold">{selectedStudent?.name ?? "No student selected"}</p>{selectedStudent?.joinCode && <p className="px-2 pt-1 font-mono text-xs tracking-wider" style={{ color: frameTheme.muted }}>Code · {selectedStudent.joinCode}</p>}<button role="menuitem" type="button" onClick={() => { setProfileOpen(false); setStudentCodeInput(""); setStudentCodeError(""); setActive(null); setActiveTestId(null); setActiveExamId(null); setPracticeSession(null); navigatePractice("home"); setStudentPage("home"); }} className="mt-3 min-h-10 w-full rounded-xl border px-3 text-left text-sm font-semibold" style={{ borderColor: frameTheme.border }}>Switch profile / log out</button></motion.div>}</AnimatePresence>
+              <button type="button" aria-expanded={profileOpen} aria-haspopup="menu" onClick={() => profileOpen ? navigateToPath("/library") : navigateToPath("/profile")} className="inline-flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition" style={{ borderColor: frameTheme.border, background: frameTheme.surface, color: frameTheme.ink }}><UserRound size={16} /><span className="max-w-32 truncate">{selectedStudent?.name ?? "My profile"}</span><ChevronDown size={14} /></button>
+              <AnimatePresence>{profileOpen && <motion.div role="menu" initial={reduceMotion ? false : { opacity: 0, y: -5, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduceMotion ? undefined : { opacity: 0, y: -4 }} className="absolute right-0 top-14 z-30 w-60 rounded-2xl border p-3 shadow-xl" style={{ borderColor: frameTheme.border, background: frameTheme.surface, color: frameTheme.ink }}><p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: frameTheme.muted }}>Student profile</p><p className="truncate px-2 text-sm font-semibold">{selectedStudent?.name ?? "No student selected"}</p>{selectedStudent?.joinCode && <p className="px-2 pt-1 font-mono text-xs tracking-wider" style={{ color: frameTheme.muted }}>Code · {selectedStudent.joinCode}</p>}<button role="menuitem" type="button" onClick={() => { setProfileOpen(false); setStudentCodeInput(""); setStudentCodeError(""); setActive(null); setActiveTestId(null); setActiveExamId(null); setPracticeSession(null); navigateToPath("/"); }} className="mt-3 min-h-10 w-full rounded-xl border px-3 text-left text-sm font-semibold" style={{ borderColor: frameTheme.border }}>Switch profile / log out</button></motion.div>}</AnimatePresence>
             </div>
             {Settings}
           </div>}
@@ -1058,7 +1146,7 @@ export function ReadingApp() {
         </motion.header>
 
         <AnimatePresence mode="wait" initial={false}>
-    {teacherMode ? teacherAuthenticated ? <TeacherDashboard key="teacher-dashboard" students={students} assignments={assignments} tests={allTests} theme={classroomTheme} onAddStudent={addStudent} onUpdateStudentCode={updateStudentCode} onToggleStudentPhase={toggleStudentPhase} onCreateAssignments={createAssignments} onCreateTest={createTeacherTest} onPublishMaterial={publishTeacherTest} onUnpublishMaterial={unpublishTeacherTest} onUpdateMaterial={(testId, updates) => { const next = allTests.map((item) => item.id === testId ? { ...item, ...updates } : item); setAllTests(next); persistSharedClassroomValue(CUSTOM_TESTS_STORAGE_KEY, JSON.stringify(next.filter((item) => item.id.startsWith("custom-")))); }} onGradeAssignment={gradeAssignment} onTeachPointer={publishTeachingPointer} onBack={() => { publishTeachingPointer(null); void signOutTeacher(); }} /> : <TeacherLoginGate theme={classroomTheme} onCancel={() => setTeacherMode(false)} onAuthenticated={() => setTeacherAuthenticated(true)} /> : studentPage === "home" ? <StudentHomePage studentName={selectedStudent?.name ?? "Student"} theme={theme} code={studentCodeInput} error={studentCodeError} onCodeChange={(value) => { setStudentCodeInput(value); setStudentCodeError(""); }} onSubmit={joinStudentProfile} onContinue={() => setStudentPage("library")} onTeacherLogin={() => setTeacherMode(true)} /> : practiceSession ? <FlashcardPracticeView cards={practiceSession} theme={theme} onClose={() => { setPracticeSession(null); navigatePractice("home"); }} /> : activeTest ? <ReadingTestView key={activeTest.id + (activeExamId ?? "")} test={activeTest} theme={theme} preferences={preferences} exam={activeExam} studentId={selectedStudentId} draft={activeExam ? undefined : progress.testDrafts[activeTest.id]} notes={readingNotes} teacherPointer={teachingPointer} onDraftChange={persistTestDraft} onAddNote={addReadingNote} onUpdateNote={updateReadingNote} onBack={() => { setActiveTestId(null); setActiveExamId(null); }} onComplete={(score, answers) => completeTest(activeTest, score, answers)} /> : studentPage === "exams" ? <StudentExamsPage assignments={assignments} tests={allTests} studentId={selectedStudentId} theme={theme} onOpenExam={beginExam} onBackToLibrary={() => setStudentPage("library")} /> : active && current ? <motion.main key={"read-" + currentKey} initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -8 }} transition={{ type: "spring", stiffness: 280, damping: 30 }} className="mx-auto pb-16 pt-10" style={{ maxWidth: preferences.width === "narrow" ? 740 : 920 }}>
+    {teacherMode ? teacherAuthenticated ? <TeacherDashboard key="teacher-dashboard" students={students} assignments={assignments} tests={allTests} theme={classroomTheme} initialTab={currentTeacherTab} onTabChange={(tab) => navigateToPath(tab === "students" ? "/teacher" : `/teacher/${tab}`)} onAddStudent={addStudent} onUpdateStudentCode={updateStudentCode} onToggleStudentPhase={toggleStudentPhase} onCreateAssignments={createAssignments} onCreateTest={createTeacherTest} onPublishMaterial={publishTeacherTest} onUnpublishMaterial={unpublishTeacherTest} onUpdateMaterial={(testId, updates) => { const next = allTests.map((item) => item.id === testId ? { ...item, ...updates } : item); setAllTests(next); persistSharedClassroomValue(CUSTOM_TESTS_STORAGE_KEY, JSON.stringify(next.filter((item) => item.id.startsWith("custom-")))); }} onGradeAssignment={gradeAssignment} onTeachPointer={publishTeachingPointer} onBack={() => { publishTeachingPointer(null); void signOutTeacher(); }} /> : <TeacherLoginGate theme={classroomTheme} onCancel={() => navigateToPath("/")} onAuthenticated={() => setTeacherAuthenticated(true)} /> : studentPage === "home" ? <StudentHomePage studentName={selectedStudent?.name ?? "Student"} theme={theme} code={studentCodeInput} error={studentCodeError} onCodeChange={(value) => { setStudentCodeInput(value); setStudentCodeError(""); }} onSubmit={joinStudentProfile} onContinue={() => navigateToPath("/library")} onTeacherLogin={() => navigateToPath("/teacher")} /> : practiceSession ? <FlashcardPracticeView cards={practiceSession} theme={theme} onClose={() => { setPracticeSession(null); navigatePractice("home"); }} /> : activeTest ? <ReadingTestView key={activeTest.id + (activeExamId ?? "")} test={activeTest} theme={theme} preferences={preferences} exam={activeExam} studentId={selectedStudentId} draft={activeExam ? undefined : progress.testDrafts[activeTest.id]} notes={readingNotes} teacherPointer={teachingPointer} onDraftChange={persistTestDraft} onAddNote={addReadingNote} onUpdateNote={updateReadingNote} onBack={() => { navigateToPath(activeExamId ? "/exams" : "/library"); }} onComplete={(score, answers) => completeTest(activeTest, score, answers)} /> : studentPage === "exams" ? <StudentExamsPage assignments={assignments} tests={allTests} studentId={selectedStudentId} theme={theme} onOpenExam={beginExam} onBackToLibrary={() => navigateToPath("/library")} /> : active && current ? <motion.main key={"read-" + currentKey} initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -8 }} transition={{ type: "spring", stiffness: 280, damping: 30 }} className="mx-auto pb-16 pt-10" style={{ maxWidth: preferences.width === "narrow" ? 740 : 920 }}>
           <div className={preferences.focus ? "mb-10 text-center" : "mb-10"}>
             <p className="mb-3 text-xs font-bold uppercase tracking-[.18em]" style={{ color: theme.accent }}>{englishCurriculum[active.unit].title}</p>
             <h1 className="font-serif text-4xl font-semibold tracking-tight sm:text-5xl">{current.title}</h1>
@@ -1089,7 +1177,7 @@ export function ReadingApp() {
           <section aria-labelledby="practice-title" className={practiceStep === "home" ? "mb-5 grid gap-3 sm:grid-cols-2" : "mb-10 overflow-hidden rounded-[1.75rem] border p-5 shadow-[0_24px_70px_rgba(28,36,31,.10)] sm:p-8"} style={practiceStep === "home" ? undefined : { borderColor: theme.border, background: `linear-gradient(145deg, ${theme.surface}, ${theme.page})`, color: theme.ink }}>
             {practiceStep !== "home" && <div className="mb-6 flex items-center justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[.16em]" style={{ color: theme.accent }}>Practice</p><p className="mt-1 text-sm" style={{ color: theme.muted }}>{["Practice home", "Choose test", "Choose section", "Deck setup"][practiceStageIndex]}</p></div><div className="flex items-center gap-1.5" aria-label={`Step ${practiceStageIndex} of 3`}>{[1, 2, 3].map((step) => <span key={step} className="h-1.5 rounded-full transition-all duration-300" style={{ width: step === practiceStageIndex ? 24 : 8, background: step <= practiceStageIndex ? theme.accent : theme.border }} />)}</div></div>}
             <>
-              {practiceStep === "home" ? <><motion.button data-tactile="card" key="practice-home" type="button" onClick={() => navigatePractice("test")} initial={reduceMotion ? false : { opacity: 0, y: 8, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduceMotion ? undefined : { opacity: 0, scale: .98 }} whileHover={reduceMotion ? undefined : preferences.shadowMode === "hard-offset" ? { x: -3, y: -3 } : { y: -3 }} whileTap={reduceMotion ? undefined : preferences.shadowMode === "hard-offset" ? { x: 3, y: 3, scale: .99 } : { scale: .985 }} transition={{ type: "spring", stiffness: 320, damping: 26 }} className="group flex min-h-24 w-full items-center justify-between rounded-2xl px-6 py-5 text-left sm:min-h-28 sm:px-9" style={{ background: theme.accent, color: theme.onAccent }}><span><span className="block font-serif text-2xl font-semibold tracking-tight sm:text-3xl">Practice</span><span className="mt-1 block text-xs opacity-80 sm:text-sm">Read at your own pace</span></span><span className="grid h-11 w-11 place-items-center rounded-full border border-white/25 bg-white/10 transition-transform duration-300 group-hover:translate-x-1"><ArrowRight size={20} /></span></motion.button><motion.button data-tactile="card" key="timed-exam-home" type="button" onClick={() => setStudentPage("exams")} initial={reduceMotion ? false : { opacity: 0, y: 8, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} whileHover={reduceMotion ? undefined : preferences.shadowMode === "hard-offset" ? { x: -3, y: -3 } : { y: -3 }} whileTap={reduceMotion ? undefined : preferences.shadowMode === "hard-offset" ? { x: 3, y: 3, scale: .99 } : { scale: .985 }} transition={{ type: "spring", stiffness: 320, damping: 26 }} className="group flex min-h-24 w-full items-center justify-between rounded-2xl border px-6 py-5 text-left sm:min-h-28 sm:px-9" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}><span><span className="block font-serif text-2xl font-semibold tracking-tight sm:text-3xl">Timed Exam</span><span className="mt-1 block text-xs sm:text-sm" style={{ color: theme.muted }}>Open your assigned exams</span></span><span className="grid h-11 w-11 place-items-center rounded-full border transition-transform duration-300 group-hover:translate-x-1" style={{ borderColor: theme.border, color: theme.accent }}><CalendarClock size={19} /></span></motion.button></> : practiceStep === "test" ? <motion.div key="choose-test" initial={reduceMotion ? false : { opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={reduceMotion ? undefined : { opacity: 0, x: -8 }} transition={{ duration: .2 }}>
+              {practiceStep === "home" ? <><motion.button data-tactile="card" key="practice-home" type="button" onClick={() => navigatePractice("test")} initial={reduceMotion ? false : { opacity: 0, y: 8, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduceMotion ? undefined : { opacity: 0, scale: .98 }} whileHover={reduceMotion ? undefined : preferences.shadowMode === "hard-offset" ? { x: -3, y: -3 } : { y: -3 }} whileTap={reduceMotion ? undefined : preferences.shadowMode === "hard-offset" ? { x: 3, y: 3, scale: .99 } : { scale: .985 }} transition={{ type: "spring", stiffness: 320, damping: 26 }} className="group flex min-h-24 w-full items-center justify-between rounded-2xl px-6 py-5 text-left sm:min-h-28 sm:px-9" style={{ background: theme.accent, color: theme.onAccent }}><span><span className="block font-serif text-2xl font-semibold tracking-tight sm:text-3xl">Practice</span><span className="mt-1 block text-xs opacity-80 sm:text-sm">Read at your own pace</span></span><span className="grid h-11 w-11 place-items-center rounded-full border border-white/25 bg-white/10 transition-transform duration-300 group-hover:translate-x-1"><ArrowRight size={20} /></span></motion.button><motion.button data-tactile="card" key="timed-exam-home" type="button" onClick={() => navigateToPath("/exams")} initial={reduceMotion ? false : { opacity: 0, y: 8, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} whileHover={reduceMotion ? undefined : preferences.shadowMode === "hard-offset" ? { x: -3, y: -3 } : { y: -3 }} whileTap={reduceMotion ? undefined : preferences.shadowMode === "hard-offset" ? { x: 3, y: 3, scale: .99 } : { scale: .985 }} transition={{ type: "spring", stiffness: 320, damping: 26 }} className="group flex min-h-24 w-full items-center justify-between rounded-2xl border px-6 py-5 text-left sm:min-h-28 sm:px-9" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}><span><span className="block font-serif text-2xl font-semibold tracking-tight sm:text-3xl">Timed Exam</span><span className="mt-1 block text-xs sm:text-sm" style={{ color: theme.muted }}>Open your assigned exams</span></span><span className="grid h-11 w-11 place-items-center rounded-full border transition-transform duration-300 group-hover:translate-x-1" style={{ borderColor: theme.border, color: theme.accent }}><CalendarClock size={19} /></span></motion.button></> : practiceStep === "test" ? <motion.div key="choose-test" initial={reduceMotion ? false : { opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={reduceMotion ? undefined : { opacity: 0, x: -8 }} transition={{ duration: .2 }}>
                 <button type="button" onClick={() => navigatePractice("home")} className="mb-5 inline-flex items-center gap-2 text-sm font-semibold" style={{ color: theme.muted }}><ArrowLeft size={15} />Practice home</button><h2 id="practice-title" className="font-serif text-3xl font-semibold">Choose a test</h2><p className="mt-2 text-sm" style={{ color: theme.muted }}>Choose the reading set you want to review.</p>
                 <div className="mt-5 grid gap-2.5 sm:grid-cols-2">{[0, 1, 2, 3].map((index) => { const test = practiceTests[index]; const disabled = !test; const selected = Boolean(test && selectedPracticeTest?.id === test.id); const progressWidth = test ? Math.min(100, Math.round((progress.testDrafts[test.id] ? Object.keys(progress.testDrafts[test.id].answers).length / Math.max(1, test.questions.length) : 0) * 100)) : 0; return <motion.button key={index} type="button" disabled={disabled} onClick={() => { if (test) navigatePractice("section", { testId: test.id, sections: [1] }); }} whileHover={!disabled && !reduceMotion ? { y: -2 } : undefined} whileTap={!disabled && !reduceMotion ? { scale: .99 } : undefined} className="relative flex min-h-24 items-center gap-3 rounded-xl border p-3.5 text-left transition disabled:cursor-not-allowed disabled:opacity-50" style={{ borderColor: selected ? theme.accent : theme.border, background: selected ? theme.accent + "0b" : theme.surface, boxShadow: selected ? `0 0 0 1px ${theme.accent}22` : undefined }}><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[11px] font-bold" style={{ background: selected ? theme.accent : theme.page, color: selected ? theme.surface : theme.muted }}>0{index + 1}</span><span className="min-w-0 flex-1"><span className="block text-[10px] font-bold uppercase tracking-[.14em]" style={{ color: selected ? theme.accent : theme.muted }}>{test ? selected ? "Selected" : "Available" : "Locked"}</span><span className="mt-0.5 block truncate text-sm font-semibold">{test?.title ?? `Reading Test ${index + 1}`}</span><span className="mt-0.5 block truncate text-[11px]" style={{ color: theme.muted }}>{test?.topic ?? "More practice is coming soon"}</span>{test && <span className="mt-2 block h-0.5 overflow-hidden rounded-full" style={{ background: theme.border }}><span className="block h-full rounded-full" style={{ width: `${progressWidth}%`, background: theme.accent }} /></span>}</span>{test && <ArrowRight size={16} style={{ color: selected ? theme.accent : theme.muted }} />}</motion.button>; })}</div>
               </motion.div> : practiceStep === "section" ? <motion.div key="choose-section" initial={reduceMotion ? false : { opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={reduceMotion ? undefined : { opacity: 0, x: -8 }} transition={{ duration: .2 }}>
@@ -1099,13 +1187,13 @@ export function ReadingApp() {
               </motion.div> : <motion.div key="deck-setup" initial={reduceMotion ? false : { opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={reduceMotion ? undefined : { opacity: 0, x: -8 }} transition={{ duration: .2 }}>
                 <button type="button" onClick={() => navigatePractice("section")} className="mb-5 inline-flex items-center gap-2 text-sm font-semibold" style={{ color: theme.muted }}><ArrowLeft size={15} />Choose section</button><p className="text-xs font-bold uppercase tracking-[.15em]" style={{ color: theme.accent }}>Reading · {selectedPracticeTest?.title}</p><h2 id="practice-title" className="mt-2 font-serif text-3xl font-semibold">Set up your deck</h2><p className="mt-2 text-sm" style={{ color: theme.muted }}>Choose how many cards you want to review.</p>
                 <div className="mt-6 rounded-2xl border p-5 sm:p-6" style={{ borderColor: theme.border, background: theme.page }}><div className="flex items-center justify-between gap-3"><div><p className="font-semibold">Maximum cards</p><p className="mt-1 text-xs" style={{ color: theme.muted }}>From your selected sections</p></div><motion.span key={practiceQuestionCount} initial={reduceMotion ? false : { opacity: .6, y: 3 }} animate={{ opacity: 1, y: 0 }} className="text-lg font-bold tabular-nums" style={{ color: theme.accent }}>{practiceQuestionCount}</motion.span></div><input aria-label="Maximum number of flashcards" type="range" min="1" max={maxPracticeCards} step="1" value={Math.min(practiceQuestionCount, maxPracticeCards)} onChange={(event) => navigatePractice("setup", { count: Number(event.target.value), replace: true })} className="mt-5 h-8 w-full cursor-pointer" style={{ accentColor: theme.accent }} /><div className="flex justify-between text-xs" style={{ color: theme.muted }}><span>1 card</span><span>{maxPracticeCards} max</span></div></div>
-                <div className="mt-5 flex flex-col-reverse items-stretch justify-between gap-3 sm:flex-row sm:items-center"><p className="text-xs" style={{ color: theme.muted }}>{selectedVocabularyCount} cards across {practiceSections.length} selected sections · about {Math.max(1, Math.round(practiceQuestionCount * .4))} minutes</p><button type="button" disabled={!selectedPracticeTest || practiceSections.length === 0} onClick={() => { if (!selectedPracticeTest) return; const selectedDecks = readingVocabularyDecks.filter((deck) => practiceSections.includes(deck.section)); const maxCards = Math.max(...selectedDecks.map((deck) => deck.cards.length)); const deck = Array.from({ length: maxCards }, (_, index) => selectedDecks.flatMap((section) => section.cards[index] ? [{ ...section.cards[index], sectionTitle: section.title }] : [])).flat(); const cards = deck.slice(0, Math.min(practiceQuestionCount, deck.length)).map((item, index) => ({ questionNumber: index + 1, prompt: item.term, options: [], optionLabels: "plain" as const, answer: item.meaning, explanation: [item.sectionTitle, item.example ? `Example: “${item.example}”` : item.kind === "collocation" ? "Collocation" : "Academic vocabulary"].join(" · ") })); setPracticeSession(cards); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold shadow-sm transition hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40" style={{ background: theme.accent, color: theme.onAccent }}>Start flashcards <ArrowRight size={15} /></button></div>
+                <div className="mt-5 flex flex-col-reverse items-stretch justify-between gap-3 sm:flex-row sm:items-center"><p className="text-xs" style={{ color: theme.muted }}>{selectedVocabularyCount} cards across {practiceSections.length} selected sections · about {Math.max(1, Math.round(practiceQuestionCount * .4))} minutes</p><button type="button" disabled={!selectedPracticeTest || practiceSections.length === 0} onClick={() => { if (!selectedPracticeTest) return; setPracticeSession(buildPracticeCards(practiceSections, practiceQuestionCount)); navigateToPath(`/flashcards?test=${encodeURIComponent(selectedPracticeTest.id)}&sections=${practiceSections.join(",")}&count=${practiceQuestionCount}`); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold shadow-sm transition hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40" style={{ background: theme.accent, color: theme.onAccent }}>Start flashcards <ArrowRight size={15} /></button></div>
               </motion.div>}
             </>
           </section>
-          {practiceStep === "home" && importantExamRows.length > 0 && <section aria-labelledby="important-exams-title" className="mb-10"><div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.16em]" style={{ color: theme.accent }}>Your next steps</p><h2 id="important-exams-title" className="mt-1 font-serif text-2xl font-semibold">Important exams</h2></div><button type="button" onClick={() => setStudentPage("exams")} className="inline-flex min-h-10 items-center gap-2 rounded-full border px-4 text-sm font-semibold" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}>All exams <ArrowRight size={14} /></button></div><div className="grid gap-3 md:grid-cols-2">{importantExamRows.map(({ assignment, test, startsAt, endsAt }) => { const graded = Boolean(assignment.gradedAt); const available = clockNow >= startsAt; const inProgress = Boolean(assignment.startedAt); const label = graded ? "Graded · Ready to review" : inProgress ? "In progress" : available ? "Ready to start" : "Upcoming"; const statusColor = graded ? (theme.dark ? "#9bd5a6" : "#27734a") : available ? theme.accent : theme.muted; return <article key={assignment.id} className="flex flex-col justify-between gap-4 rounded-2xl border p-4 sm:p-5" style={{ borderColor: graded ? statusColor + "66" : theme.border, background: theme.surface }}><div><div className="flex flex-wrap items-center justify-between gap-2"><span className="rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider" style={{ background: statusColor + "18", color: statusColor }}>{label}</span><span className="text-xs" style={{ color: theme.muted }}>{assignment.durationMinutes} min</span></div><h3 className="mt-3 font-serif text-xl font-semibold">{test.title}</h3><p className="mt-1 text-sm" style={{ color: theme.muted }}>{graded ? `Score · ${assignment.score ?? 0}/${test.questions.length} points` : `${test.topic} · ${available ? `Due ${new Date(endsAt).toLocaleString()}` : `Opens ${new Date(startsAt).toLocaleString()}`}`}</p>{graded && assignment.teacherFeedback && <p className="mt-2 line-clamp-2 text-sm" style={{ color: theme.muted }}>{assignment.teacherFeedback}</p>}</div><button type="button" onClick={() => graded ? beginExam(assignment) : available ? beginExam(assignment) : setStudentPage("exams")} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full px-5 text-sm font-bold sm:w-auto sm:self-start" style={{ background: available || graded ? theme.accent : theme.page, color: available || graded ? theme.onAccent : theme.ink }}>{graded ? "Review answers" : inProgress ? "Resume exam" : available ? "Start exam" : "View exam details"}<ArrowRight size={15} /></button></article>; })}</div></section>}
+          {practiceStep === "home" && importantExamRows.length > 0 && <section aria-labelledby="important-exams-title" className="mb-10"><div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.16em]" style={{ color: theme.accent }}>Your next steps</p><h2 id="important-exams-title" className="mt-1 font-serif text-2xl font-semibold">Important exams</h2></div><button type="button" onClick={() => navigateToPath("/exams")} className="inline-flex min-h-10 items-center gap-2 rounded-full border px-4 text-sm font-semibold" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}>All exams <ArrowRight size={14} /></button></div><div className="grid gap-3 md:grid-cols-2">{importantExamRows.map(({ assignment, test, startsAt, endsAt }) => { const graded = Boolean(assignment.gradedAt); const available = clockNow >= startsAt; const inProgress = Boolean(assignment.startedAt); const label = graded ? "Graded · Ready to review" : inProgress ? "In progress" : available ? "Ready to start" : "Upcoming"; const statusColor = graded ? (theme.dark ? "#9bd5a6" : "#27734a") : available ? theme.accent : theme.muted; return <article key={assignment.id} className="flex flex-col justify-between gap-4 rounded-2xl border p-4 sm:p-5" style={{ borderColor: graded ? statusColor + "66" : theme.border, background: theme.surface }}><div><div className="flex flex-wrap items-center justify-between gap-2"><span className="rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider" style={{ background: statusColor + "18", color: statusColor }}>{label}</span><span className="text-xs" style={{ color: theme.muted }}>{assignment.durationMinutes} min</span></div><h3 className="mt-3 font-serif text-xl font-semibold">{test.title}</h3><p className="mt-1 text-sm" style={{ color: theme.muted }}>{graded ? `Score · ${assignment.score ?? 0}/${test.questions.length} points` : `${test.topic} · ${available ? `Due ${new Date(endsAt).toLocaleString()}` : `Opens ${new Date(startsAt).toLocaleString()}`}`}</p>{graded && assignment.teacherFeedback && <p className="mt-2 line-clamp-2 text-sm" style={{ color: theme.muted }}>{assignment.teacherFeedback}</p>}</div><button type="button" onClick={() => graded ? beginExam(assignment) : available ? beginExam(assignment) : navigateToPath("/exams")} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full px-5 text-sm font-bold sm:w-auto sm:self-start" style={{ background: available || graded ? theme.accent : theme.page, color: available || graded ? theme.onAccent : theme.ink }}>{graded ? "Review answers" : inProgress ? "Resume exam" : available ? "Start exam" : "View exam details"}<ArrowRight size={15} /></button></article>; })}</div></section>}
             {practiceStep === "home" && <section aria-label="Learning phases" className="mb-10"><div className="mb-3 flex items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.16em]" style={{ color: theme.accent }}>Your learning path</p><h2 className="mt-1 font-serif text-2xl font-semibold">Choose a phase</h2></div><span className="text-xs font-medium" style={{ color: theme.muted }}>{unlockedPhases.length} of 4 open for {selectedStudent?.name ?? "student"}</span></div><div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{([1, 2, 3, 4] as const).map((phase) => { const unlocked = unlockedPhases.includes(phase); const selected = activePhase === phase; return <motion.button data-tactile="control" key={phase} type="button" disabled={!unlocked} onClick={() => setActivePhase(phase)} aria-current={selected ? "step" : undefined} whileHover={unlocked && !reduceMotion ? preferences.shadowMode === "hard-offset" ? { x: -3, y: -3 } : { y: -2 } : undefined} whileTap={unlocked && !reduceMotion ? preferences.shadowMode === "hard-offset" ? { x: 3, y: 3 } : { scale: 0.98 } : undefined} transition={{ type: "spring", stiffness: 420, damping: 30 }} className="flex min-h-16 items-center justify-between rounded-2xl border px-4 py-3 text-left font-semibold disabled:cursor-not-allowed disabled:opacity-35" style={{ borderColor: selected ? theme.accent : theme.border, background: selected ? theme.accent : theme.surface, color: selected ? theme.surface : unlocked ? theme.ink : theme.muted, boxShadow: selected ? "0 8px 24px " + theme.accent + "28" : undefined }}><span><span className="block text-xs opacity-75">{unlocked ? selected ? "Open now" : "Available" : "Locked"}</span><span className="mt-0.5 block">Phase {phase}</span></span>{selected ? <Check size={18} /> : unlocked ? <span className="h-4 w-4 rounded-full border" style={{ borderColor: theme.border }} /> : <LockKeyhole size={15} />}</motion.button>; })}</div></section>}
-          {practiceStep === "home" && <ExamHistoryPreview rows={pastExams} theme={theme} onViewAll={() => setStudentPage("exams")} />}
+          {practiceStep === "home" && <ExamHistoryPreview rows={pastExams} theme={theme} onViewAll={() => navigateToPath("/exams")} />}
           {practiceStep === "home" && <>{NOTES_ENABLED && readingNotes.length > 0 && <section className="mb-10"><div className="mb-4 flex items-center gap-2"><StickyNote size={17} style={{ color: theme.accent }} /><div><p className="text-xs font-bold uppercase tracking-[.16em]" style={{ color: theme.accent }}>Later review</p><h2 className="mt-1 font-serif text-2xl font-semibold">Your reading notes</h2></div></div><div className="grid gap-3 md:grid-cols-2">{readingNotes.map((note) => <article key={note.id} className="rounded-2xl border p-4" style={{ borderColor: theme.border, background: theme.surface }}><p className="text-xs font-bold" style={{ color: theme.accent }}>{note.context}</p><p className="mt-1 text-xs" style={{ color: theme.muted }}>{note.testTitle}</p>{note.quote && <p className="mt-2 line-clamp-2 text-sm italic leading-6" style={{ color: theme.muted }}>“{note.quote}”</p>}<p className="mt-2 whitespace-pre-wrap text-sm leading-6">{note.text}</p></article>)}</div></section>}
           {visibleTests.length > 0 && <section className="mb-10"><div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.16em]" style={{ color: theme.accent }}>Phase {activePhase}</p><h2 className="mt-1 font-serif text-2xl font-semibold">Reading tests</h2><p className="mt-1 text-sm" style={{ color: theme.muted }}>Practice comprehension with your assigned reading materials.</p></div><span className="text-sm" style={{ color: theme.muted }}>{phaseTests.filter((test) => progress.testsDone.includes(test.id)).length} of {phaseTests.length} complete</span></div>
                         <div className="grid gap-4">{visibleTests.map((test) => {

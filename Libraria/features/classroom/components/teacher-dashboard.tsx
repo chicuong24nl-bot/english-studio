@@ -29,6 +29,8 @@ export function TeacherDashboard({
   onGradeAssignment,
   onTeachPointer,
   onBack,
+  initialTab = "students",
+  onTabChange,
 }: {
   students: StudentProfile[];
   assignments: ExamAssignment[];
@@ -45,10 +47,12 @@ export function TeacherDashboard({
   onGradeAssignment: (assignmentId: string, questionPoints: Record<number, number>, feedback?: string) => void;
   onTeachPointer: (pointer: TeachingPointer | null) => void;
   onBack: () => void;
+  initialTab?: "students" | "materials" | "teach" | "exams" | "settings";
+  onTabChange?: (tab: "students" | "materials" | "teach" | "exams" | "settings") => void;
 }) {
   const reduceMotion = useReducedMotion();
   const [newName, setNewName] = useState("");
-  const [activeTab, setActiveTab] = useState<"students" | "materials" | "teach" | "exams" | "settings">("students");
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [examFilter, setExamFilter] = useState<"all" | "not-done" | "needs-review" | "graded">("all");
   const [showAssignmentForm, setShowAssignmentForm] = useState(false);
   const [examNotice, setExamNotice] = useState("");
@@ -74,6 +78,8 @@ export function TeacherDashboard({
   const [visibilityDraft, setVisibilityDraft] = useState<{ testId: string; visibility: "all" | "students" | "groups"; studentIds: string[]; groupNames: string[] } | null>(null);
   const [showTestBuilder, setShowTestBuilder] = useState(false);
   const [showIELTSBuilder, setShowIELTSBuilder] = useState(false);
+
+  useEffect(() => { setActiveTab(initialTab); }, [initialTab]);
   const [testTitle, setTestTitle] = useState("");
   const [testTopic, setTestTopic] = useState("");
   const [testMinutes, setTestMinutes] = useState(8);
@@ -350,7 +356,7 @@ export function TeacherDashboard({
         <button onClick={onBack} className="inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold transition hover:shadow-sm" style={{ borderColor: theme.border, background: theme.surface }}><ArrowLeft size={16} />Student view</button>
       </div>
       <div className="grid grid-cols-2 gap-2 rounded-2xl border p-1.5 sm:grid-cols-5" style={{ borderColor: theme.border, background: theme.page }} role="tablist" aria-label="Teacher workspace">
-        {([{ id: "students", label: "Students", count: students.length }, { id: "materials", label: "Materials", count: tests.filter((test) => test.id.startsWith("custom-")).length }, { id: "teach", label: "Teach", count: teachableTests.length }, { id: "exams", label: "Exams & review", count: assignments.length }, { id: "settings", label: "Settings" }] as const).map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={activeTab === tab.id} onClick={() => setActiveTab(tab.id)} className="flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold transition-colors" style={{ background: activeTab === tab.id ? theme.surface : "transparent", color: activeTab === tab.id ? theme.accent : theme.muted }}>{tab.id === "settings" && <Settings2 size={15} />}{tab.id === "teach" && <Presentation size={15} />}{tab.label}{"count" in tab && <span className="text-xs opacity-75">{tab.count}</span>}</button>)}
+        {([{ id: "students", label: "Students", count: students.length }, { id: "materials", label: "Materials", count: tests.filter((test) => test.id.startsWith("custom-")).length }, { id: "teach", label: "Teach", count: teachableTests.length }, { id: "exams", label: "Exams & review", count: assignments.length }, { id: "settings", label: "Settings" }] as const).map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={activeTab === tab.id} onClick={() => { setActiveTab(tab.id); onTabChange?.(tab.id); }} className="flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold transition-colors" style={{ background: activeTab === tab.id ? theme.surface : "transparent", color: activeTab === tab.id ? theme.accent : theme.muted }}>{tab.id === "settings" && <Settings2 size={15} />}{tab.id === "teach" && <Presentation size={15} />}{tab.label}{"count" in tab && <span className="text-xs opacity-75">{tab.count}</span>}</button>)}
       </div>
       {activeTab === "teach" && <section className="rounded-3xl border p-5 sm:p-7" style={cardStyle}>
         <div className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.16em]" style={{ color: theme.accent }}>Live reading lesson</p><h2 className="mt-1 font-serif text-2xl font-semibold">Teach a passage</h2><p className="mt-1 max-w-2xl text-sm leading-6" style={{ color: theme.muted }}>Choose a reading test and section. Move your cursor over the passage to point it out to students viewing that section.</p></div><button type="button" onClick={() => onTeachPointer(null)} className="rounded-full border px-3 py-2 text-xs font-semibold" style={{ borderColor: theme.border, color: theme.ink }}>Stop sharing cursor</button></div>
