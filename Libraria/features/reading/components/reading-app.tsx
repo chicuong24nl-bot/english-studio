@@ -433,7 +433,7 @@ function StudentExamsPage({ assignments, tests, studentId, theme, onOpenExam, on
   const now = Date.now();
   const rows = assignments.flatMap((assignment) => {
     const test = tests.find((item) => item.id === assignment.testId);
-    if (assignment.studentId !== studentId || !test || test.status === "draft") return [];
+    if (assignment.studentId !== studentId || !test || test.status !== "published") return [];
     const start = new Date(assignment.startsAt).getTime();
     const end = Math.min(start + assignment.durationMinutes * 60_000, assignment.closesAt ? new Date(assignment.closesAt).getTime() : Number.POSITIVE_INFINITY);
     const expired = now >= end && !assignment.completedAt;
@@ -765,14 +765,14 @@ export function ReadingApp() {
     if (test.visibility === "students") return Boolean(test.studentIds?.includes(selectedStudentId));
     return !test.studentId || test.studentId === selectedStudentId;
   };
-  const phaseTests = allTests.filter((test) => test.status !== "draft" && test.kind !== "exam" && !test.timedExam && (test.kind === "ielts" || test.id.startsWith("custom-")) && (test.phase ?? 1) === activePhase && assignedToStudent(test));
+  const phaseTests = allTests.filter((test) => test.status === "published" && test.kind !== "exam" && !test.timedExam && (test.kind === "ielts" || test.id.startsWith("custom-")) && (test.phase ?? 1) === activePhase && assignedToStudent(test));
   const unfinishedTest = phaseTests.find((test) => (progress.testsStarted ?? []).includes(test.id) && !progress.testsDone.includes(test.id) && (!test.opensAt || clockNow >= new Date(test.opensAt).getTime()) && (!test.closesAt || clockNow <= new Date(test.closesAt).getTime()));
   const heroTest = unfinishedTest ?? phaseTests.find((test) => (!test.opensAt || clockNow >= new Date(test.opensAt).getTime()) && (!test.closesAt || clockNow <= new Date(test.closesAt).getTime())) ?? null;
   const visibleTests = phaseTests.filter((test) => (test.title + " " + test.topic).toLowerCase().includes(query.toLowerCase()));
   const practiceTests = phaseTests.filter((test) => (!test.opensAt || clockNow >= new Date(test.opensAt).getTime()) && (!test.closesAt || clockNow <= new Date(test.closesAt).getTime()));
   const assignedExamRows = assignments.flatMap((assignment) => {
     const test = allTests.find((item) => item.id === assignment.testId);
-    if (assignment.studentId !== selectedStudentId || !test || test.status === "draft") return [];
+    if (assignment.studentId !== selectedStudentId || !test || test.status !== "published") return [];
     const startsAt = new Date(assignment.startsAt).getTime();
     const endsAt = Math.min(startsAt + assignment.durationMinutes * 60_000, assignment.closesAt ? new Date(assignment.closesAt).getTime() : Number.POSITIVE_INFINITY);
     const expired = !assignment.completedAt && clockNow >= endsAt;
