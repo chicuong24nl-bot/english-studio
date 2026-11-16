@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, BookOpen, Check, CheckCircle2, ChevronDown, Layers3, RotateCcw, Sparkles, StickyNote, X, XCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronDown, Layers3, RotateCcw, StickyNote, X, XCircle } from "lucide-react";
 import { AnimatePresence, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
 import { getReadingParagraphs, type ReadingFlashcard, type ReadingPassage, type ReadingQuestion, type ReadingTest } from "@/features/reading/data/reading-tests";
 import { createLocalId, type ExamAssignment, type ReadingNote, type ReadingTestDraft, type TeachingPointer } from "@/features/classroom/data-model";
@@ -175,16 +175,6 @@ export function FlashcardPracticeView({ cards, theme, onClose }: { cards: Practi
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3"><button type="button" onClick={previous} disabled={index === 0} className="inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold disabled:opacity-35" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}><ArrowLeft size={15} />Previous</button><div className="flex flex-wrap items-center justify-end gap-2">{!showAnswer ? <button type="button" onClick={() => setShowAnswer(true)} className="min-h-12 rounded-full px-6 py-3 text-sm font-bold shadow-sm transition hover:shadow-md" style={{ background: theme.accent, color: theme.onAccent }}>Show answer</button> : <><button type="button" onClick={() => advance("review", "next")} className="inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition hover:shadow-sm" style={{ borderColor: "#f59e0b66", background: "#f59e0b12", color: theme.dark ? "#f4c66b" : "#946000" }}><RotateCcw size={15} />Review</button><button type="button" onClick={() => advance("know", "next")} className="inline-flex min-h-12 items-center gap-2 rounded-full px-6 py-3 text-sm font-bold shadow-sm transition hover:shadow-md" style={{ background: theme.accent, color: theme.onAccent }}>{index === cards.length - 1 ? "Finish deck" : "Next card"}<ArrowRight size={16} /></button></>}</div></div>
     </>}
   </motion.main>;
-}
-
-export function ReadingSticker({ theme, reduceMotion }: { theme: ReaderTheme; reduceMotion: boolean | null }) {
-  return <div aria-hidden="true" className="flex shrink-0 items-center justify-center">
-    <motion.div animate={reduceMotion ? undefined : { y: [0, -5, 0], rotate: [-3, 1, -3] }} transition={reduceMotion ? undefined : { duration: 3.2, repeat: Infinity, ease: "easeInOut" }} className="relative grid h-[4.5rem] w-[4.5rem] place-items-center rounded-[1.35rem] border-[3px] border-white/90 shadow-[0_8px_22px_rgba(34,29,20,.2)]" style={{ background: `linear-gradient(145deg, ${theme.accent}, ${theme.accent}cc)` }}>
-      <BookOpen size={31} strokeWidth={1.8} color={theme.surface} />
-      <motion.span animate={reduceMotion ? undefined : { scale: [1, 1.18, 1], opacity: [.75, 1, .75] }} transition={reduceMotion ? undefined : { duration: 1.8, repeat: Infinity, ease: "easeInOut" }} className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full border-2 border-white shadow-sm" style={{ background: "#f6c86f", color: "#5c3e1f" }}><Sparkles size={13} strokeWidth={2.4} /></motion.span>
-      <span className="absolute -bottom-1 -left-1 h-3 w-3 rounded-full border-2 border-white" style={{ background: theme.accent }} />
-    </motion.div>
-  </div>;
 }
 
 export function ReadingTestView({ test, theme, preferences, exam, studentId, draft, notes, teacherPointer, onDraftChange, onAddNote, onUpdateNote, onBack, onComplete }: { test: ReadingTest; theme: ReaderTheme; preferences: Preferences; exam?: ExamAssignment | null; studentId: string; draft?: ReadingTestDraft; notes: ReadingNote[]; teacherPointer: TeachingPointer | null; onDraftChange: (testId: string, draft: ReadingTestDraft) => void; onAddNote: (note: ReadingNote) => void; onUpdateNote: (noteId: string, text: string) => void; onBack: () => void; onComplete: (score: number, answers: Record<number, number | string>) => void }) {
