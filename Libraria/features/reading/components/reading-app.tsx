@@ -794,7 +794,7 @@ export function ReadingApp() {
   const Settings = (
     <div className="relative" data-settings-popover>
       <button type="button" onClick={() => setSettingsOpen((open) => !open)} aria-haspopup="dialog" aria-expanded={settingsOpen} className="inline-flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-bold transition hover:shadow-sm" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}>
-        <Settings2 size={17} /> Settings <ChevronDown size={15} />
+        <Settings2 size={18} strokeWidth={1.5} /> Settings <ChevronDown size={16} strokeWidth={1.5} />
       </button>
       <AnimatePresence>
       {settingsOpen && <motion.div role="dialog" aria-label={teacherMode ? "Display settings" : "Reading settings"} key="reading-settings" initial={reduceMotion ? false : { opacity: 0, y: -8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduceMotion ? undefined : { opacity: 0, y: -5, scale: 0.98 }} transition={{ type: "spring", stiffness: 420, damping: 32 }} className="absolute right-0 top-14 z-20 max-h-[calc(100dvh-6rem)] w-[min(340px,calc(100vw-2rem))] overflow-y-auto overscroll-contain rounded-2xl border p-5 shadow-xl" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}>
@@ -842,7 +842,7 @@ export function ReadingApp() {
           style={{ borderColor: frameTheme.border, background: frameTheme.page + "e8", pointerEvents: headerVisible || settingsOpen ? "auto" : "none" }}
         >
           <div className="flex items-center gap-3">
-            {active || activeTest ? <button onClick={() => { setActive(null); navigateToPath(activeExamId ? "/exams" : "/library"); }} className="inline-flex items-center gap-2 rounded-full p-2 pr-3 text-sm font-bold transition hover:bg-black/5"><ArrowLeft size={18} /><span>Library</span></button> : <button type="button" onClick={() => { setActive(null); setActiveTestId(null); setActiveExamId(null); setPracticeSession(null); navigateToPath("/"); }} className="flex items-center gap-2 text-lg font-black tracking-tight"><span className="grid h-9 w-9 place-items-center rounded-xl" style={{ background: frameTheme.accent, color: frameTheme.ink }}><BookOpen size={19} /></span><span className="hidden min-[380px]:inline">Libraria</span></button>}
+            {active || activeTest ? <button onClick={() => { setActive(null); navigateToPath(activeExamId ? "/exams" : "/library"); }} className="inline-flex items-center gap-2 rounded-full p-2 pr-3 text-sm font-bold transition hover:bg-black/5"><ArrowLeft size={18} /><span>Library</span></button> : <button type="button" onClick={() => { setActive(null); setActiveTestId(null); setActiveExamId(null); setPracticeSession(null); navigateToPath("/"); }} className="flex items-center gap-2 text-lg font-black tracking-tight"><span className="grid h-9 w-9 place-items-center rounded-xl" style={{ background: frameTheme.accent, color: frameTheme.ink }}><BookOpen size={18} strokeWidth={1.5} /></span><span className="hidden min-[380px]:inline">Libraria</span></button>}
             {(active || activeTest) && !preferences.focus && <span className="hidden text-sm sm:inline" style={{ color: frameTheme.muted }}>Libraria <span className="mx-1">/</span>{activeTest?.title ?? current?.title}</span>}
           </div>
           {!teacherMode && <div className="flex items-center gap-2">
