@@ -1,22 +1,27 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
-import { ArrowLeft, ArrowRight, Bookmark, BookOpen, CalendarClock, Check, CheckCircle2, ChevronDown, Clock3, Layers3, LockKeyhole, Minus, Plus, RotateCcw, Search, Settings2, Sparkles, StickyNote, Type, UserRound, X, XCircle } from "lucide-react";
-import { AnimatePresence, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
+import { ArrowLeft, ArrowRight, Bookmark, BookOpen, CalendarClock, Check, ChevronDown, Clock3, LockKeyhole, Minus, Plus, Search, Settings2, StickyNote, Type, UserRound, X } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { englishCurriculum } from "@/content/english-curriculum";
 import { readingVocabularyDecks } from "@/features/reading/data/vocabulary-decks";
-import { getReadingParagraphs, readingTests, type IELTSQuestionType, type ReadingFlashcard, type ReadingPassage, type ReadingQuestion, type ReadingTest } from "@/features/reading/data/reading-tests";
+import { readingTests, type ReadingTest } from "@/features/reading/data/reading-tests";
 import { CUSTOM_TESTS_STORAGE_KEY, createLocalId, createStudentJoinCode, DEFAULT_STUDENT_ID, EXAMS_STORAGE_KEY, SELECTED_STUDENT_STORAGE_KEY, STUDENTS_STORAGE_KEY, TEACHING_POINTER_STORAGE_KEY, emptyStudentProgress, studentNotesKey, studentProgressKey, type ExamAssignment, type ReadingNote, type ReadingTestDraft, type StudentProfile, type StudentProgress, type TeachingPointer } from "@/features/classroom/data-model";
 import { TeacherDashboard } from "@/features/classroom/components/teacher-dashboard";
 import { TeacherLoginGate } from "@/features/classroom/components/teacher-login-gate";
 import { collectLocalClassroomState, persistSharedClassroomValue } from "@/features/classroom/client-sync";
+import { canStudentAccessMaterial, canStudentOpenExam, isPublishedMaterial } from "@/features/reading/data/material-policy";
+import { StudentExamsPage } from "@/features/reading/components/student-exams-page";
+import { StudentHomePage } from "@/features/reading/components/student-home-page";
+import { answerIsCorrect, FlashcardPracticeView, ReadingSticker, ReadingTestView, timeAgo } from "@/features/reading/components/reading-experience";
+import type { DesignStyle, Preferences, PracticeCard, ReaderTheme, StudentExamRow } from "@/features/reading/components/ui-types";
+import { decodeRouteSegments, isKnownAppPath, parsePracticeLocation, practicePath, teacherTabs, type PracticeStep } from "@/features/reading/navigation/routes";
 
 const LEGACY_STORAGE_KEY = "english-reader-progress";
 const SETTINGS_KEY = "english-reader-settings";
 const REMEMBERED_STUDENT_CODE_KEY = "libaria-remembered-student-code";
 const NOTES_ENABLED = false;
 type Progress = StudentProgress;
-type PracticeStep = "home" | "test" | "section" | "setup";
 type TeacherTab = "students" | "materials" | "teach" | "exams" | "settings";
 const baseReadingTestIds = new Set(readingTests.map((test) => test.id));
 function mergeTeacherMaterials(saved: unknown): ReadingTest[] {
@@ -29,12 +34,6 @@ function mergeTeacherMaterials(saved: unknown): ReadingTest[] {
 function persistTeacherMaterials(tests: ReadingTest[]) {
   persistSharedClassroomValue(CUSTOM_TESTS_STORAGE_KEY, JSON.stringify(tests));
 }
-type DesignStyle = "brutalism" | "claymorphism" | "editorial" | "fiction" | "neobrutalism" | "vintage";
-type ShadowMode = "hard-offset" | "soft-elevation" | "pillowed-clay";
-type Preferences = { theme: "light" | "dark"; designStyle: DesignStyle; shadowMode: ShadowMode; font: "serif" | "sans" | "mono"; fontSize: number; lineHeight: "relaxed" | "spacious" | "compact"; width: "narrow" | "wide"; focus: boolean };
-type ReaderTheme = { name: string; page: string; surface: string; ink: string; muted: string; border: string; accent: string; onAccent: string; dark: boolean };
-type PracticeCard = { questionNumber: number; prompt: string; options: string[]; optionLabels: "letters" | "plain"; answer: string; explanation: string };
-type StudentExamRow = { assignment: ExamAssignment; test: ReadingTest; expired: boolean; startsAt: number; endsAt: number };
 const emptyProgress: Progress = emptyStudentProgress;
 const defaults: Preferences = { theme: "light", designStyle: "editorial", shadowMode: "soft-elevation", font: "serif", fontSize: 21, lineHeight: "relaxed", width: "narrow", focus: false };
 const designStyles: Record<DesignStyle, { name: string; description: string; light: ReaderTheme; dark: ReaderTheme }> = {
@@ -66,51 +65,6 @@ function readStudentProgress(studentId: string): Progress {
   }
 }
 
-function answerIsCorrect(question: ReadingQuestion, answer: number | string | undefined) {
-  if (answer === undefined) return false;
-  if (typeof question.answer === "number") return answer === question.answer;
-  if (typeof answer === "number") return question.options[answer]?.trim().toLocaleLowerCase() === question.answer.trim().toLocaleLowerCase();
-  return String(answer).trim().toLocaleLowerCase() === question.answer.trim().toLocaleLowerCase();
-}
-
-function timeAgo(timestamp: string | undefined, now: number) {
-  if (!timestamp) return "Just started";
-  const minutes = Math.max(0, Math.floor((now - new Date(timestamp).getTime()) / 60_000));
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes} ${minutes === 1 ? "minute" : "minutes"} ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
-  const days = Math.floor(hours / 24);
-  return `${days} ${days === 1 ? "day" : "days"} ago`;
-}
-
-function readPracticeLocation() {
-  const path = window.location.pathname.replace(/\/+$/, "") || "/";
-  const params = new URLSearchParams(window.location.search);
-  const route = params.get("practice");
-  const steps: Record<string, PracticeStep> = {
-    "choose-test": "test",
-    "choose-section": "section",
-    "deck-setup": "setup",
-  };
-  const pathSteps: Record<string, PracticeStep> = {
-    "/practice/tests": "test",
-    "/practice/sections": "section",
-    "/practice/setup": "setup",
-  };
-  const step = pathSteps[path] ?? steps[route ?? ""] ?? "home";
-  const rawSections = params.get("sections");
-  const sectionValues = rawSections === null ? [1] : rawSections.split(",").map(Number).filter((section) => Number.isInteger(section) && section > 0);
-  const count = Number(params.get("count"));
-  return {
-    step,
-    path,
-    testId: params.get("test") ?? "",
-    sections: [...new Set(sectionValues)],
-    count: Number.isInteger(count) && count > 0 ? count : 12,
-  };
-}
-
 function buildPracticeCards(sections: number[], count: number): PracticeCard[] {
   const selectedDecks = readingVocabularyDecks.filter((deck) => sections.includes(deck.section));
   const maxCards = Math.max(0, ...selectedDecks.map((deck) => deck.cards.length));
@@ -125,330 +79,9 @@ function buildPracticeCards(sections: number[], count: number): PracticeCard[] {
   }));
 }
 
-function questionGroupInstructions(test: ReadingTest, questionIndex: number) {
-  const questionNumber = (test.questionNumberStart ?? (test.id === "ielts-hiv-pandemic" ? 13 : 1)) + questionIndex;
-  const customGroup = test.questionGroups?.find((group) => group.startQuestion === questionNumber);
-  if (customGroup) return { title: `Questions ${customGroup.startQuestion}–${customGroup.endQuestion}`, text: customGroup.instructions };
-  const testId = test.id;
-  if (testId === "ielts-reading-test-1" && questionIndex === 0) return {
-    title: "Questions 1–8",
-    text: "Reading Passage 1 has eight paragraphs, A–H. What paragraph has the following information? Write the correct letter, A–H, in boxes 1–8 on your answer sheet.",
-  };
-  if (testId === "ielts-reading-test-1" && questionIndex === 8) return {
-    title: "Questions 9–12",
-    text: "Complete the sentences using NO MORE THAN TWO WORDS from the passage. Write your answers in boxes 9–12 on your answer sheet.",
-  };
-  if (testId === "ielts-reading-test-1" && questionIndex === 12) return {
-    title: "Questions 13–20",
-    text: "Do the following statements agree with the information in the passage? Write TRUE if a statement agrees, FALSE if it contradicts the passage, or NOT GIVEN if the passage does not provide that information.",
-  };
-  if (testId === "ielts-reading-test-1" && questionIndex === 20) return {
-    title: "Questions 21–28",
-    text: "Complete the sentences below. Write NO MORE THAN TWO WORDS from the passage for each answer. Write your answers in boxes 21–28 on your answer sheet.",
-  };
-  if (testId === "ielts-reading-test-1" && questionIndex === 28) return {
-    title: "Section 3 · Questions 29–33",
-    text: "Choose the correct letter, A, B, C or D. Write the correct letter in boxes 29–33 on your answer sheet.",
-  };
-  if (testId === "ielts-reading-test-1" && questionIndex === 33) return {
-    title: "Questions 34–40",
-    text: "Complete the sentences below. Write ONLY ONE WORD from the passage for each answer. Write your answers in boxes 34–40 on your answer sheet.",
-  };
-  return null;
-}
-
-function MatchingHeadingPicker({ question, selectedIndex, disabled, revealResult, earnedPoint, onSelect, theme }: {
-  question: ReadingQuestion;
-  selectedIndex: number | undefined;
-  disabled: boolean;
-  revealResult: boolean;
-  earnedPoint: boolean;
-  onSelect: (index: number) => void;
-  theme: ReaderTheme;
-}) {
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const reduceMotion = useReducedMotion();
-  const answerIndex = typeof question.answer === "number" ? question.answer : question.options.findIndex((option) => option.trim().toLocaleLowerCase() === String(question.answer).trim().toLocaleLowerCase());
-  const isParagraph = question.type === "matching-headings";
-  const isTruthStatement = question.type === "true-false-not-given" || question.type === "yes-no-not-given";
-  const selectedOption = selectedIndex === undefined ? null : question.options[selectedIndex];
-  const selectedLetter = selectedOption?.match(/^([A-H])(?:\s*[–-]\s*(.*))?$/i);
-  const selectedLabel = isParagraph ? `${selectedLetter?.[1]?.toUpperCase() ?? selectedOption}${selectedLetter?.[2] ? ` — ${selectedLetter[2]}` : selectedLetter ? ` — Paragraph ${selectedLetter[1].toUpperCase()}` : ""}` : selectedOption;
-  useEffect(() => {
-    if (!dropdownOpen) return;
-    const closeOnOutside = (event: PointerEvent) => { if (event.target instanceof Node && !dropdownRef.current?.contains(event.target)) setDropdownOpen(false); };
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setDropdownOpen(false); };
-    document.addEventListener("pointerdown", closeOnOutside);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => { document.removeEventListener("pointerdown", closeOnOutside); document.removeEventListener("keydown", closeOnEscape); };
-  }, [dropdownOpen]);
-  if (isParagraph || isTruthStatement) return <div ref={dropdownRef} className="relative mt-3 max-w-md">
-    <motion.button type="button" disabled={disabled} aria-label={selectedIndex === undefined ? isParagraph ? "Select a paragraph" : "Select an answer" : isParagraph ? `Selected paragraph ${selectedLetter?.[1]?.toUpperCase() ?? selectedOption}. Change answer` : `Selected ${selectedOption}. Change answer`} aria-haspopup="listbox" aria-expanded={dropdownOpen} onClick={() => setDropdownOpen((open) => !open)} whileTap={disabled ? undefined : { scale: 0.99 }} className="flex h-12 w-full items-center justify-between rounded-xl border px-4 text-left text-sm font-semibold transition-colors disabled:cursor-default" style={{ borderColor: dropdownOpen || selectedIndex !== undefined ? theme.accent : theme.border, background: theme.surface, color: selectedIndex === undefined ? theme.muted : theme.ink }}>
-      <span>{selectedIndex === undefined ? isParagraph ? "Select a paragraph" : "Select an answer" : isParagraph ? selectedLetter?.[1]?.toUpperCase() ?? selectedOption : selectedOption}</span>
-      <motion.span animate={{ rotate: dropdownOpen ? 180 : 0 }} transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 30 }}><ChevronDown size={17} /></motion.span>
-    </motion.button>
-    <AnimatePresence initial={false}>{dropdownOpen && <motion.div role="listbox" aria-label="Paragraph choices" initial={reduceMotion ? false : { opacity: 0, y: -7, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -5, scale: 0.99 }} transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 34 }} className="absolute inset-x-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-2xl border p-1.5 shadow-xl" style={{ borderColor: theme.border, background: theme.surface, transformOrigin: "top" }}>
-      {question.options.map((option, index) => { const letter = option.match(/^([A-H])/i)?.[1]?.toUpperCase() ?? option; const selected = selectedIndex === index; const correctOption = answerIndex === index; const wrongSelected = revealResult && selected && !earnedPoint; return <button key={option + index} type="button" role="option" aria-selected={selected} disabled={disabled} onClick={() => { onSelect(index); setDropdownOpen(false); }} className="flex h-10 w-full items-center justify-between rounded-xl px-3 text-left text-sm font-semibold transition-colors" style={{ background: wrongSelected ? (theme.dark ? "#472a30" : "#fff0f0") : revealResult && correctOption ? (theme.dark ? "#233a2d" : "#e9f5ed") : selected ? theme.accent + "16" : "transparent", color: wrongSelected ? "#ad424c" : revealResult && correctOption ? "#286b43" : selected ? theme.accent : theme.ink }}><span>{isParagraph ? letter : option}</span>{wrongSelected ? <XCircle size={15} /> : revealResult && correctOption || selected ? <Check size={15} /> : null}</button>; })}
-    </motion.div>}</AnimatePresence>
-  </div>;
-  return <div className="mt-5" aria-label="Choose a paragraph">
-    <div className="mb-3 flex items-center justify-between gap-3"><div><p className="text-sm font-bold">{isParagraph ? "Choose a paragraph" : "Choose your answer"}</p><p className="mt-1 text-xs" style={{ color: theme.muted }}>Swipe the cards, then tap one to select.</p></div><span className="shrink-0 text-xs font-semibold" style={{ color: theme.muted }}>{selectedIndex === undefined ? "0" : selectedIndex + 1} / {question.options.length}</span></div>
-    <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-3 [scrollbar-width:thin]" role="group" aria-label="Paragraph choices">
-      {question.options.map((option, index) => {
-        const selected = selectedIndex === index;
-        const correctOption = answerIndex === index;
-        const wrongSelected = revealResult && selected && !earnedPoint;
-        const cardBorder = wrongSelected ? "#d56b73" : revealResult && correctOption ? "#5b9b70" : selected ? theme.accent : theme.border;
-        const cardBackground = wrongSelected ? (theme.dark ? "#472a30" : "#fff0f0") : revealResult && correctOption ? (theme.dark ? "#233a2d" : "#e9f5ed") : selected ? theme.accent + "12" : theme.page;
-        const letter = option.match(/^([A-H])(?:\s*[–-]\s*(.*))?$/i);
-        const statementHint = option.toLocaleLowerCase() === "true" ? "The passage supports this" : option.toLocaleLowerCase() === "false" ? "The passage contradicts this" : option.toLocaleLowerCase() === "not given" ? "The passage doesn’t say" : "Choose this answer";
-        return <motion.button key={option + index} type="button" disabled={disabled} aria-pressed={selected} onClick={() => onSelect(index)} whileTap={disabled ? undefined : { scale: 0.97 }} className="relative flex min-h-32 w-32 shrink-0 snap-start flex-col items-start justify-between rounded-2xl border p-4 text-left transition-colors disabled:cursor-default sm:w-36" style={{ borderColor: cardBorder, background: cardBackground, color: theme.ink, boxShadow: selected ? `0 5px 18px ${theme.accent}18` : undefined }}>
-          <span className="flex h-9 min-w-9 items-center justify-center rounded-xl px-2 text-base font-bold" style={{ background: selected ? theme.accent : theme.surface, color: selected ? theme.surface : theme.ink }}>{isParagraph ? letter?.[1]?.toUpperCase() ?? option : option}</span>
-          <span className="text-xs font-semibold leading-5" style={{ color: theme.muted }}>{isParagraph ? letter?.[2] || `Paragraph ${letter?.[1]?.toUpperCase() ?? option}` : isTruthStatement ? statementHint : "Choose this answer"}</span>
-          {wrongSelected && <XCircle size={17} className="absolute right-3 top-3 text-rose-600" aria-label="Incorrect answer" />}
-          {revealResult && correctOption && <CheckCircle2 size={17} className="absolute right-3 top-3 text-emerald-600" aria-label="Correct answer" />}
-        </motion.button>;
-      })}
-    </div>
-    <div className="mt-1 flex items-center justify-center gap-2" aria-label="Choose an answer">
-      {question.options.map((option, index) => <button key={option + index} type="button" disabled={disabled} aria-label={isParagraph ? `Select paragraph ${option.match(/^([A-H])/i)?.[1]?.toUpperCase() ?? option}` : `Select ${option}`} aria-pressed={selectedIndex === index} onClick={() => onSelect(index)} className="h-2.5 w-2.5 rounded-full transition-all disabled:cursor-default" style={{ background: selectedIndex === index ? theme.accent : theme.border, transform: selectedIndex === index ? "scale(1.25)" : undefined }} />)}
-    </div>
-    <p aria-live="polite" className="mt-4 min-h-6 text-sm font-semibold" style={{ color: revealResult ? earnedPoint ? theme.accent : "#b4434d" : selectedIndex === undefined ? theme.muted : theme.accent }}>
-      {selectedIndex === undefined ? isParagraph ? "Select a paragraph" : "Select an answer" : `Selected: ${selectedLabel}`}
-    </p>
-  </div>;
-}
-
-function FlashcardPracticeView({ cards, theme, onClose }: { cards: PracticeCard[]; theme: ReaderTheme; onClose: () => void }) {
-  const reduceMotion = useReducedMotion();
-  const [index, setIndex] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
-  const [complete, setComplete] = useState(false);
-  const [knownCount, setKnownCount] = useState(0);
-  const [reviewCount, setReviewCount] = useState(0);
-  const [dragDirection, setDragDirection] = useState<"know" | "review" | null>(null);
-  const [slideDirection, setSlideDirection] = useState<"next" | "previous" | "know" | "review">("next");
-  const [keyPulse, setKeyPulse] = useState(false);
-  const dragX = useMotionValue(0);
-  const dragRotation = useTransform(dragX, [-240, 240], [-18, 18]);
-  const card = cards[index];
-  useEffect(() => {
-    if (!complete || cards.length < 10 || reduceMotion) return;
-    if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate?.([30, 50, 30]);
-  }, [cards.length, complete, reduceMotion]);
-  if (!card) return null;
-  const advance = (result: "know" | "review", direction: "next" | "know" | "review" = "next") => {
-    if (result === "know") setKnownCount((count) => count + 1);
-    if (result === "review") setReviewCount((count) => count + 1);
-    if (index >= cards.length - 1) { setComplete(true); return; }
-    setSlideDirection(direction);
-    setIndex((current) => current + 1);
-    setShowAnswer(false);
-    setDragDirection(null);
-    dragX.set(0);
-  };
-  const previous = () => { setSlideDirection("previous"); setIndex((current) => Math.max(0, current - 1)); setShowAnswer(false); setDragDirection(null); dragX.set(0); };
-  const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: { offset: { x: number }; velocity: { x: number } }) => {
-    const direction = info.offset.x > 0 || info.velocity.x > 500 ? "know" : "review";
-    const committed = Math.abs(info.offset.x) >= 120 || Math.abs(info.velocity.x) > 500;
-    if (showAnswer && committed) advance(direction, direction);
-    else setDragDirection(null);
-  };
-  const cardVariants = {
-    enter: (direction: "next" | "previous" | "know" | "review") => reduceMotion ? { opacity: 0 } : { opacity: 0, x: direction === "next" || direction === "review" ? 64 : -64, scale: .92 },
-    center: { opacity: 1, x: 0, scale: 1 },
-    exit: (direction: "next" | "previous" | "know" | "review") => reduceMotion ? { opacity: 0 } : { opacity: .35, x: direction === "next" || direction === "review" ? -64 : 64, scale: .88 },
-  };
-  return <motion.main initial={reduceMotion ? false : { opacity: 0, y: 16, scale: .985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduceMotion ? undefined : { opacity: 0, y: -12, scale: .99 }} transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 260, damping: 28, mass: .8 }} className="mx-auto max-w-3xl pb-16 pt-8">
-    {complete ? <section className="relative overflow-hidden rounded-[2rem] border p-7 text-center shadow-sm sm:p-12" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}><span className="pointer-events-none absolute left-1/2 top-1/3" aria-hidden="true">{cards.length >= 10 && !reduceMotion && Array.from({ length: 16 }, (_, particle) => { const angle = particle / 16 * Math.PI * 2; const distance = 78 + (particle % 3) * 24; return <motion.i key={particle} className="absolute h-2 w-2 rounded-sm" style={{ background: [theme.accent, "#10b981", "#f59e0b", "#14b8a6"][particle % 4] }} initial={{ x: 0, y: 0, opacity: 1, scale: 0 }} animate={{ x: Math.cos(angle) * distance, y: Math.sin(angle) * distance, opacity: 0, scale: [0, 1, 0], rotate: particle * 47 }} transition={{ duration: .9, ease: "easeOut" }} />; })}</span><span className="relative mx-auto grid h-16 w-16 place-items-center rounded-full" style={{ background: theme.accent + "18", color: theme.accent }}><Check size={30} /></span><p className="mt-6 text-xs font-bold uppercase tracking-[.2em]" style={{ color: theme.accent }}>Practice complete</p><h1 className="mt-2 font-serif text-3xl font-semibold sm:text-4xl">Nice work.</h1><p className="mx-auto mt-3 max-w-md text-sm leading-6" style={{ color: theme.muted }}>You reviewed {cards.length} words and phrases.</p><div className="mx-auto mt-5 flex max-w-sm justify-center gap-3 text-sm"><span className="rounded-full px-3 py-1.5 font-semibold" style={{ background: "#10b98118", color: "#07834f" }}>{knownCount} known</span><span className="rounded-full px-3 py-1.5 font-semibold" style={{ background: "#f59e0b18", color: "#a56600" }}>{reviewCount} to review</span></div><div className="mt-7 flex flex-wrap justify-center gap-3"><button type="button" onClick={() => { setIndex(0); setShowAnswer(false); setKnownCount(0); setReviewCount(0); setComplete(false); }} className="min-h-12 rounded-full border px-5 py-3 text-sm font-semibold" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}>Review again</button><button type="button" onClick={onClose} className="inline-flex min-h-12 items-center gap-2 rounded-full px-6 py-3 text-sm font-bold" style={{ background: theme.accent, color: theme.onAccent }}>Back to practice <ArrowRight size={16} /></button></div></section> : <>
-      <div className="mb-5 flex items-center justify-between gap-3"><button type="button" onClick={onClose} className="inline-flex min-h-10 items-center gap-2 rounded-full px-2 text-sm font-semibold" style={{ color: theme.muted }}><ArrowLeft size={16} />Exit practice</button><span className="text-sm font-semibold tabular-nums" style={{ color: theme.ink }}>{index + 1}<span style={{ color: theme.muted }}> / {cards.length}</span></span></div>
-      <div className="mb-7"><div className="mb-2 flex items-center justify-between text-[11px] font-semibold" style={{ color: theme.muted }}><span>Vocabulary review</span><span>{Math.round(((index + 1) / cards.length) * 100)}%</span></div><div className="h-1.5 overflow-hidden rounded-full" style={{ background: theme.border }}><motion.div className="h-full rounded-full" animate={{ width: `${((index + 1) / cards.length) * 100}%` }} transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 180, damping: 24 }} style={{ background: theme.accent }} /></div></div>
-      <div className="relative isolate h-[22rem] sm:h-[26rem]" style={{ perspective: 1200 }}>
-        <AnimatePresence mode="sync" initial={false} custom={slideDirection}><motion.div key={index} custom={slideDirection} variants={cardVariants} initial="enter" role="button" tabIndex={0} aria-pressed={showAnswer} aria-label={showAnswer ? `Meaning: ${card.answer}. Tap to see the term.` : `Flashcard term: ${card.prompt}. Tap to reveal the meaning.`} onClick={() => setShowAnswer((value) => !value)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setKeyPulse(true); window.setTimeout(() => { setKeyPulse(false); setShowAnswer((value) => !value); }, reduceMotion ? 0 : 80); } }} drag={showAnswer ? "x" : false} dragConstraints={{ left: 0, right: 0 }} dragElastic={.12} dragMomentum={false} onDrag={(_, info) => setDragDirection(info.offset.x > 35 ? "know" : info.offset.x < -35 ? "review" : null)} onDragEnd={handleDragEnd} whileHover={reduceMotion ? undefined : { y: -3, scale: 1.015 }} whileTap={reduceMotion ? undefined : { scale: .995 }} animate={keyPulse ? { x: 0, y: 0, opacity: 1, scale: .97 } : "center"} exit="exit" transition={reduceMotion ? { duration: .18, ease: "easeOut" } : { duration: .34, ease: [.22, 1, .36, 1] }} className="absolute inset-0 z-10 cursor-grab rounded-[2rem] outline-none active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-offset-4" style={{ touchAction: "pan-y", rotate: dragRotation }}>
-          <motion.div initial={false} animate={reduceMotion ? { rotateY: 0, scale: 1 } : { rotateY: showAnswer ? 180 : 0, scale: [1, .985, 1] }} transition={reduceMotion ? { duration: .18, ease: "easeOut" } : { duration: .46, ease: [.22, 1, .36, 1] }} className="relative min-h-[22rem] w-full sm:min-h-[26rem]" style={{ transformStyle: "preserve-3d" }}>
-            <div className="absolute inset-0 flex min-h-[22rem] flex-col items-center justify-center overflow-hidden rounded-[2rem] border p-7 text-center shadow-[0_18px_50px_rgba(20,35,31,.08)] sm:min-h-[26rem] sm:p-12" style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden", opacity: reduceMotion && showAnswer ? 0 : 1, visibility: reduceMotion && showAnswer ? "hidden" : "visible", zIndex: reduceMotion && showAnswer ? 0 : 1, borderColor: dragDirection === "know" ? "#10b981" : dragDirection === "review" ? "#f59e0b" : theme.border, background: theme.surface, color: theme.ink, boxShadow: dragDirection ? `0 0 0 3px ${dragDirection === "know" ? "#10b981" : "#f59e0b"}33, 0 18px 50px rgba(20,35,31,.12)` : undefined }}><span aria-hidden="true" className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full blur-3xl" style={{ background: theme.accent + "12" }} /><AnimatePresence>{dragDirection && showAnswer && <motion.span initial={{ opacity: 0, scale: .7 }} animate={{ opacity: 1, scale: 1.2 }} exit={{ opacity: 0 }} className="absolute right-6 top-6 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider" style={{ color: dragDirection === "know" ? "#07834f" : "#a56600", background: dragDirection === "know" ? "#10b98120" : "#f59e0b20" }}>{dragDirection === "know" ? "Know it" : "Review"}</motion.span>}</AnimatePresence><span className="relative rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[.15em]" style={{ color: theme.accent, background: theme.accent + "14" }}>Think of the meaning</span><h1 className="relative mt-8 max-w-xl font-serif text-3xl font-semibold leading-tight sm:text-4xl">{card.prompt}</h1>{card.options.length > 0 && <ol className="relative mt-6 w-full max-w-lg space-y-2 text-left">{card.options.map((option, optionIndex) => <li key={optionIndex} className="rounded-xl border px-4 py-3 text-sm leading-6" style={{ borderColor: theme.border, background: theme.page }}>{card.optionLabels === "letters" && <span className="mr-2 font-bold" style={{ color: theme.accent }}>{String.fromCharCode(65 + optionIndex)}.</span>}{option}</li>)}</ol>}<span className="relative mt-8 text-xs" style={{ color: theme.muted }}>Tap card to reveal answer</span></div>
-            <div className="absolute inset-0 flex min-h-[22rem] flex-col items-center justify-center overflow-hidden rounded-[2rem] border p-7 text-center shadow-[0_18px_50px_rgba(20,35,31,.08)] sm:min-h-[26rem] sm:p-12 transition-colors duration-200" style={{ transform: reduceMotion ? "none" : "rotateY(180deg)", backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden", opacity: reduceMotion && !showAnswer ? 0 : 1, visibility: reduceMotion && !showAnswer ? "hidden" : "visible", zIndex: reduceMotion && showAnswer ? 1 : 0, borderColor: theme.accent + "55", background: theme.page, color: theme.ink }}><span className="rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[.18em]" style={{ color: theme.accent, background: theme.accent + "14" }}>Meaning</span><h1 className="mt-4 max-w-xl font-serif text-2xl font-semibold leading-relaxed sm:text-3xl">{card.answer}</h1>{card.explanation && <p className="mt-5 max-w-xl text-sm font-medium leading-6" style={{ color: theme.muted }}>{card.explanation}</p>}<span className="mt-6 text-xs" style={{ color: theme.muted }}>Tap card to see the term</span></div>
-          </motion.div>
-        </motion.div></AnimatePresence>
-      </div>
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3"><button type="button" onClick={previous} disabled={index === 0} className="inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold disabled:opacity-35" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}><ArrowLeft size={15} />Previous</button><div className="flex flex-wrap items-center justify-end gap-2">{!showAnswer ? <button type="button" onClick={() => setShowAnswer(true)} className="min-h-12 rounded-full px-6 py-3 text-sm font-bold shadow-sm transition hover:shadow-md" style={{ background: theme.accent, color: theme.onAccent }}>Show answer</button> : <><button type="button" onClick={() => advance("review", "next")} className="inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition hover:shadow-sm" style={{ borderColor: "#f59e0b66", background: "#f59e0b12", color: theme.dark ? "#f4c66b" : "#946000" }}><RotateCcw size={15} />Review</button><button type="button" onClick={() => advance("know", "next")} className="inline-flex min-h-12 items-center gap-2 rounded-full px-6 py-3 text-sm font-bold shadow-sm transition hover:shadow-md" style={{ background: theme.accent, color: theme.onAccent }}>{index === cards.length - 1 ? "Finish deck" : "Next card"}<ArrowRight size={16} /></button></>}</div></div>
-    </>}
-  </motion.main>;
-}
-
-function ReadingSticker({ theme, reduceMotion }: { theme: ReaderTheme; reduceMotion: boolean | null }) {
-  return <div aria-hidden="true" className="flex shrink-0 items-center justify-center">
-    <motion.div animate={reduceMotion ? undefined : { y: [0, -5, 0], rotate: [-3, 1, -3] }} transition={reduceMotion ? undefined : { duration: 3.2, repeat: Infinity, ease: "easeInOut" }} className="relative grid h-[4.5rem] w-[4.5rem] place-items-center rounded-[1.35rem] border-[3px] border-white/90 shadow-[0_8px_22px_rgba(34,29,20,.2)]" style={{ background: `linear-gradient(145deg, ${theme.accent}, ${theme.accent}cc)` }}>
-      <BookOpen size={31} strokeWidth={1.8} color={theme.surface} />
-      <motion.span animate={reduceMotion ? undefined : { scale: [1, 1.18, 1], opacity: [.75, 1, .75] }} transition={reduceMotion ? undefined : { duration: 1.8, repeat: Infinity, ease: "easeInOut" }} className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full border-2 border-white shadow-sm" style={{ background: "#f6c86f", color: "#5c3e1f" }}><Sparkles size={13} strokeWidth={2.4} /></motion.span>
-      <span className="absolute -bottom-1 -left-1 h-3 w-3 rounded-full border-2 border-white" style={{ background: theme.accent }} />
-    </motion.div>
-  </div>;
-}
-
-function ReadingTestView({ test, theme, preferences, exam, studentId, draft, notes, teacherPointer, onDraftChange, onAddNote, onUpdateNote, onBack, onComplete }: { test: ReadingTest; theme: ReaderTheme; preferences: Preferences; exam?: ExamAssignment | null; studentId: string; draft?: ReadingTestDraft; notes: ReadingNote[]; teacherPointer: TeachingPointer | null; onDraftChange: (testId: string, draft: ReadingTestDraft) => void; onAddNote: (note: ReadingNote) => void; onUpdateNote: (noteId: string, text: string) => void; onBack: () => void; onComplete: (score: number, answers: Record<number, number | string>) => void }) {
-  const reduceMotion = useReducedMotion();
-  const [answers, setAnswers] = useState<Record<number, number | string>>(() => exam?.answers ?? draft?.answers ?? {});
-  const [submitted, setSubmitted] = useState(() => Boolean(exam?.completedAt));
-  const [activeSection, setActiveSection] = useState<number | null>(() => draft?.activeSection ?? null);
-  const [flashcardIndex, setFlashcardIndex] = useState(0);
-  const [flashcardFlipped, setFlashcardFlipped] = useState(false);
-  const [knownFlashcards, setKnownFlashcards] = useState<string[]>([]);
-  const [notePanelOpen, setNotePanelOpen] = useState(false);
-  const [noteContext, setNoteContext] = useState("Reading test");
-  const [noteQuote, setNoteQuote] = useState("");
-  const [noteText, setNoteText] = useState("");
-  const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
-  const [editNoteText, setEditNoteText] = useState("");
-  const score = test.questions.reduce((total, question, index) => total + (answerIsCorrect(question, answers[index]) ? 1 : 0), 0);
-  const deadline = exam ? Math.min(new Date(exam.startsAt).getTime() + exam.durationMinutes * 60_000, exam.closesAt ? new Date(exam.closesAt).getTime() : Number.POSITIVE_INFINITY) : null;
-  const [secondsLeft, setSecondsLeft] = useState<number | null>(() => deadline === null ? null : Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
-  const submitTimerRef = useRef<() => void>(() => undefined);
-  const fontFamily = preferences.font === "serif" ? "Georgia, 'Times New Roman', serif" : preferences.font === "mono" ? "ui-monospace, SFMono-Regular, monospace" : "Arial, Helvetica, sans-serif";
-  const passages: ReadingPassage[] = test.passages?.length ? test.passages : [{ title: "Reading passage", text: test.passage }];
-  const legacySectionedTest = test.id === "ielts-reading-test-1" && passages.length === 3;
-  const isSectionedTest = passages.length > 1 && (legacySectionedTest || test.questions.some((question) => question.passageIndex !== undefined));
-  const questionRanges = [[0, 12], [12, 28], [28, 40]] as const;
-  const sectionPages = passages.map((passage, index) => ({
-    passageIndex: index,
-    section: passage.section ?? index + 1,
-    title: passage.title,
-    range: legacySectionedTest ? questionRanges[index] ?? [0, test.questions.length] as const : (() => {
-      const indexes = test.questions.flatMap((question, questionIndex) => (question.passageIndex ?? 0) === index ? [questionIndex] : []);
-      return indexes.length ? [indexes[0], indexes[indexes.length - 1] + 1] as const : [0, 0] as const;
-    })(),
-  }));
-  const activeSectionPage = sectionPages.find((section) => section.section === activeSection) ?? null;
-  const shownPassages = activeSectionPage ? passages.filter((passage) => (passage.section ?? 1) === activeSection) : passages;
-  const lastFollowedTeacherPosition = useRef("");
-  useEffect(() => {
-    if (!teacherPointer || teacherPointer.testId !== test.id || !isSectionedTest) { lastFollowedTeacherPosition.current = ""; return; }
-    const positionKey = `${teacherPointer.section}:${teacherPointer.paragraphIndex}`;
-    if (lastFollowedTeacherPosition.current === positionKey) return;
-    lastFollowedTeacherPosition.current = positionKey;
-    if (activeSection !== teacherPointer.section) setActiveSection(teacherPointer.section);
-    const timer = window.setTimeout(() => document.getElementById(`teacher-passage-${test.id}-${teacherPointer.section}-${teacherPointer.paragraphIndex}`)?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" }), 90);
-    return () => window.clearTimeout(timer);
-  }, [teacherPointer?.testId, teacherPointer?.section, teacherPointer?.paragraphIndex, test.id, isSectionedTest, reduceMotion]);
-  const questionEntries = test.questions.map((question, index) => ({ question, index })).filter(({ index }) => {
-    if (!isSectionedTest || !activeSectionPage) return true;
-    return legacySectionedTest ? index >= activeSectionPage.range[0] && index < activeSectionPage.range[1] : (test.questions[index].passageIndex ?? 0) === activeSectionPage.passageIndex;
-  });
-  useEffect(() => {
-    if (!exam && !submitted) onDraftChange(test.id, { answers, activeSection, updatedAt: new Date().toISOString() });
-  }, [answers, activeSection, exam, onDraftChange, submitted]);
-  const flashcardStorageKey = "libaria-flashcards-" + studentId + "-" + test.id;
-  useEffect(() => { try { const saved = JSON.parse(localStorage.getItem(flashcardStorageKey) ?? "[]"); setKnownFlashcards(Array.isArray(saved) ? saved.filter((id): id is string => typeof id === "string") : []); } catch { setKnownFlashcards([]); } }, [flashcardStorageKey]);
-  const markFlashcard = (card: ReadingFlashcard, known: boolean) => {
-    const id = card.term.trim().toLocaleLowerCase();
-    const next = known ? Array.from(new Set([...knownFlashcards, id])) : knownFlashcards.filter((item) => item !== id);
-    setKnownFlashcards(next);
-    persistSharedClassroomValue(flashcardStorageKey, JSON.stringify(next));
-    setFlashcardFlipped(false);
-    setFlashcardIndex((index) => Math.min(index + 1, (test.flashcards?.length ?? 1) - 1));
-  };
-  const openNote = (context: string, quote = "") => {
-    setNoteContext(context);
-    setNoteQuote(quote);
-    setNoteText("");
-    setNotePanelOpen(true);
-  };
-  const saveNote = () => {
-    const text = noteText.trim();
-    if (!text) return;
-    onAddNote({ id: createLocalId(), studentId, testId: test.id, testTitle: test.title, context: noteContext, quote: noteQuote || undefined, text, createdAt: new Date().toISOString() });
-    setNoteText("");
-  };
-  const submit = () => {
-    if (submitted) return;
-    setSubmitted(true);
-    onComplete(score, answers);
-  };
-
-  submitTimerRef.current = () => submit();
-
-  useEffect(() => {
-    if (deadline === null || submitted) return;
-    const updateTimer = () => {
-      const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
-      setSecondsLeft(remaining);
-      if (remaining === 0) submitTimerRef.current();
-    };
-    updateTimer();
-    const interval = window.setInterval(updateTimer, 1000);
-    return () => window.clearInterval(interval);
-  }, [deadline, submitted]);
-  const navigateSection = (section: number | null) => {
-    setActiveSection(section);
-    window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
-  };
-
-  if (isSectionedTest && activeSection === null) return <motion.main initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -6 }} className="mx-auto max-w-4xl px-1 pb-16 pt-5 sm:px-0 sm:pt-8">
-    <button type="button" onClick={onBack} className="mb-8 inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}><ArrowLeft size={16} />Back to tests</button>
-    <div className="mb-7"><p className="text-xs font-bold uppercase tracking-[.16em]" style={{ color: theme.accent }}>IELTS Reading · Test 1</p><h1 className="mt-2 font-serif text-3xl font-semibold sm:text-4xl">Choose a section</h1><p className="mt-3 max-w-2xl text-sm leading-6" style={{ color: theme.muted }}>Pick where you want to begin. Each section opens on its own page, and your answers stay saved while you move between them.</p></div>
-    <div className="grid gap-3 md:grid-cols-3">{sectionPages.map((section) => { const count = section.range[1] - section.range[0]; const answered = test.questions.slice(section.range[0], section.range[1]).reduce((total, _question, offset) => total + (answers[section.range[0] + offset] !== undefined ? 1 : 0), 0); return <motion.button key={section.section} type="button" onClick={() => navigateSection(section.section)} whileHover={reduceMotion ? undefined : { y: -3 }} whileTap={reduceMotion ? undefined : { scale: 0.985 }} transition={{ type: "spring", stiffness: 400, damping: 30 }} className="flex min-h-48 flex-col justify-between rounded-2xl border p-5 text-left shadow-sm" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}><div><span className="inline-flex rounded-full px-3 py-1 text-xs font-bold" style={{ background: theme.accent + "16", color: theme.accent }}>Section {section.section}</span><h2 className="mt-4 font-serif text-xl font-semibold leading-snug">{section.title}</h2><p className="mt-2 text-sm" style={{ color: theme.muted }}>Questions {section.range[0] + 1}–{section.range[1]}</p></div><div className="mt-5 flex items-center justify-between"><span className="text-xs font-semibold" style={{ color: theme.muted }}>{answered} / {count} answered</span><span className="inline-flex items-center gap-1 text-sm font-bold" style={{ color: theme.accent }}>Open section <ArrowRight size={15} /></span></div></motion.button>; })}</div>
-  </motion.main>;
-
-  return <motion.main initial={reduceMotion ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -8 }} transition={{ type: "spring", stiffness: 280, damping: 30 }} className="mx-auto max-w-4xl px-1 pb-16 pt-5 sm:px-0 sm:pt-8">
-    {isSectionedTest && activeSectionPage && <nav aria-label="Reading sections" className="mb-6 flex flex-col justify-between gap-3 rounded-2xl border p-3 sm:flex-row sm:flex-wrap sm:items-center sm:p-4" style={{ borderColor: theme.border, background: theme.surface }}><div><p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.accent }}>Section {activeSectionPage.section} of {sectionPages.length}</p><p className="mt-1 text-sm font-semibold">{activeSectionPage.range[1] > activeSectionPage.range[0] ? `Questions ${(test.questionNumberStart ?? 1) + activeSectionPage.range[0]}–${(test.questionNumberStart ?? 1) + activeSectionPage.range[1] - 1}` : "No questions linked yet"}</p></div><div className="grid grid-cols-3 gap-2"><button type="button" onClick={() => navigateSection(null)} className="min-h-10 rounded-full border px-2 text-[11px] font-semibold sm:px-3 sm:text-xs" style={{ borderColor: theme.border, color: theme.ink }}>All sections</button><button type="button" disabled={activeSectionPage.section <= 1} onClick={() => navigateSection(Math.max(1, (activeSection ?? 1) - 1))} className="min-h-10 rounded-full border px-2 text-[11px] font-semibold disabled:opacity-40 sm:px-3 sm:text-xs" style={{ borderColor: theme.border, color: theme.ink }}>Previous</button><button type="button" disabled={activeSectionPage.section >= sectionPages.length} onClick={() => navigateSection(Math.min(sectionPages.length, (activeSection ?? 1) + 1))} className="min-h-10 rounded-full px-2 text-[11px] font-bold disabled:opacity-40 sm:px-3 sm:text-xs" style={{ background: theme.accent, color: theme.onAccent }}>Next section</button></div></nav>}<div className="mb-7 flex flex-wrap items-end justify-between gap-4"><div><p className="mb-2 text-xs font-bold uppercase tracking-[.18em]" style={{ color: theme.accent }}>{exam ? "Scheduled exam" : "Phase " + (test.phase ?? 1) + " · Reading test"}</p><h1 className="max-w-2xl font-serif text-3xl font-semibold leading-tight sm:text-4xl">{test.title}</h1><p className="mt-3 text-sm" style={{ color: theme.muted }}>{test.topic} · {exam ? `${exam.durationMinutes} minutes` : test.minutes > 0 ? `${test.minutes} minutes` : "No time limit"} · {test.questions.length} questions</p></div><div className="flex items-center gap-3">{exam && !submitted && <div className="rounded-2xl border px-4 py-3 text-right" style={{ borderColor: theme.border, background: theme.surface }}><span className="block text-xs font-bold uppercase tracking-wider" style={{ color: theme.muted }}>Time left</span><strong className="font-mono text-2xl tabular-nums" style={{ color: (secondsLeft ?? 0) < 60 ? "#d45b50" : theme.ink }}>{Math.floor((secondsLeft ?? 0) / 60).toString().padStart(2, "0")}:{((secondsLeft ?? 0) % 60).toString().padStart(2, "0")}</strong></div>}{submitted && exam?.gradedAt && <div className="rounded-2xl border px-4 py-3 text-right" style={{ borderColor: theme.border, background: theme.surface }}><span className="block text-xs font-bold uppercase tracking-wider" style={{ color: theme.muted }}>Your score</span><strong className="text-2xl">{exam.score ?? 0}<span className="text-base font-medium" style={{ color: theme.muted }}> / {test.questions.length}</span></strong></div>}{NOTES_ENABLED && <button type="button" onClick={() => { setNotePanelOpen(true); setNoteContext("Reading test"); setNoteQuote(""); }} className="inline-flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-bold" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}><StickyNote size={16} />Notes <span className="text-xs" style={{ color: theme.muted }}>{notes.filter((note) => note.testId === test.id).length}</span></button>}</div></div>
-    {(!exam || test.kind === "ielts") && <div className="space-y-5">{shownPassages.map((passage, passageIndex) => { const sectionNumber = passage.section ?? ((test.passages ?? [passage]).indexOf(passage) + 1); const sectionPointer = teacherPointer?.testId === test.id && teacherPointer.section === sectionNumber ? teacherPointer : null; return <motion.article layout key={passageIndex} className="rounded-3xl border p-6 shadow-sm sm:p-10" style={{ background: theme.surface, borderColor: theme.border, color: theme.ink, fontFamily }}>
-      <div className="mb-6 flex items-center justify-between gap-3 border-b pb-4" style={{ borderColor: theme.border }}><div><span className="block text-xs font-bold uppercase tracking-[.16em]" style={{ color: theme.muted }}>Section {sectionNumber}</span><h2 className="mt-1 font-serif text-2xl font-semibold">{passage.title}</h2>{passage.difficulty && <span className="mt-1 inline-block text-xs" style={{ color: theme.muted }}>{passage.difficulty}</span>}{sectionPointer && <span role="status" className="mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-bold" style={{ background: theme.accent + "18", color: theme.accent }}><span className="h-2 w-2 animate-pulse rounded-full" style={{ background: theme.accent }} />Teacher is guiding this section</span>}</div><span className="shrink-0 text-xs" style={{ color: theme.muted }}>{passage.text.split(/\s+/).filter(Boolean).length} words</span></div>
-      <div className="space-y-5" style={{ fontSize: preferences.fontSize, lineHeight: preferences.lineHeight === "compact" ? 1.55 : preferences.lineHeight === "spacious" ? 2.15 : 1.85 }}>{getReadingParagraphs(passage).map((paragraph, index) => { const labelMatch = paragraph.match(/^\(([A-H])\)\s*([\s\S]*)$/); const paragraphText = labelMatch ? labelMatch[2] : paragraph; const isTeacherParagraph = sectionPointer?.paragraphIndex === index; const start = sectionPointer?.highlightStart; const end = sectionPointer?.highlightEnd; const hasTeacherHighlight = isTeacherParagraph && Number.isInteger(start) && Number.isInteger(end) && (start ?? 0) >= 0 && (end ?? 0) > (start ?? 0) && (end ?? 0) <= paragraphText.length; return <div id={`teacher-passage-${test.id}-${sectionNumber}-${index}`} key={index} className={`${labelMatch ? "grid grid-cols-[2rem_minmax(0,1fr)] gap-3 whitespace-pre-line" : "whitespace-pre-line"} relative rounded-lg transition-colors duration-200`} style={isTeacherParagraph ? { background: theme.accent + "12", boxShadow: `inset 3px 0 ${theme.accent}` } : undefined}>{isTeacherParagraph && sectionPointer && <span aria-hidden="true" className="pointer-events-none absolute z-10" style={{ left: `${Math.max(3, Math.min(97, sectionPointer.x))}%`, top: `${Math.max(2, Math.min(98, sectionPointer.y))}%`, transform: "translate(-50%, -50%)" }}><span className="absolute -top-6 left-0 whitespace-nowrap rounded-md px-2 py-0.5 text-[10px] font-bold text-white shadow-sm" style={{ background: theme.accent }}>{sectionPointer.teacherName}</span><span className="mx-auto block h-7 w-0.5" style={{ background: theme.accent, boxShadow: `0 0 0 2px ${theme.surface}` }} /></span>}{labelMatch && <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border text-sm font-bold" style={{ borderColor: theme.border, background: theme.page, color: theme.accent }}>{labelMatch[1]}</span>}<span className="min-w-0">{hasTeacherHighlight ? <>{paragraphText.slice(0, start)}<mark className="rounded-sm px-0.5" style={{ background: theme.accent + "55", color: theme.ink, boxDecorationBreak: "clone", WebkitBoxDecorationBreak: "clone" } as React.CSSProperties}>{paragraphText.slice(start, end)}</mark>{paragraphText.slice(end)}</> : paragraphText}</span></div>; })}</div>
-    </motion.article>; })}</div>}
-    <section className={exam ? "space-y-4" : "mt-8 space-y-4"}><div className="flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[.16em]" style={{ color: theme.accent }}>{exam ? "Exam" : "Comprehension"}</p><h2 className="mt-1 font-serif text-2xl font-semibold">{exam ? "Exam questions" : "Check what you understood"}</h2></div>{submitted && !exam && <button onClick={() => { setAnswers({}); setSubmitted(false); }} className="text-sm font-bold" style={{ color: theme.accent }}>Try again</button>}</div>
-      {questionEntries.map(({ question, index }) => { const questionNumber = (test.questionNumberStart ?? (test.id === "ielts-hiv-pandemic" ? 13 : 1)) + index; const questionInstructions = questionGroupInstructions(test, index); const isTextAnswer = question.type === "sentence-completion" || question.type === "summary-completion"; const isSwipeChoice = question.type === "matching-headings" || question.type === "true-false-not-given" || question.type === "yes-no-not-given"; const revealResult = submitted && (!exam || Boolean(exam.gradedAt)); const correct = answerIsCorrect(question, answers[index]); const earnedPoint = exam?.gradedAt ? Boolean(exam.questionPoints?.[index]) : correct; return <Fragment key={question.prompt}>{questionInstructions && <div className="rounded-2xl border px-4 py-4 sm:px-5" style={{ borderColor: theme.border, background: theme.page, color: theme.ink }}><p className="text-sm font-bold">{questionInstructions.title}</p><p className="mt-2 text-sm leading-6" style={{ color: theme.muted }}>{questionInstructions.text}</p></div>}<motion.fieldset layout key={question.prompt} className="group relative rounded-2xl border p-5 sm:p-6" style={{ borderColor: theme.border, background: theme.surface }}><legend className="px-1 text-base font-semibold leading-relaxed">{questionNumber}. {question.prompt}</legend>{isSwipeChoice ? <MatchingHeadingPicker question={question} selectedIndex={typeof answers[index] === "number" ? answers[index] as number : undefined} disabled={submitted} revealResult={revealResult} earnedPoint={earnedPoint} onSelect={(optionIndex) => setAnswers({ ...answers, [index]: optionIndex })} theme={theme} /> : question.type && <p className="mt-1 text-xs font-semibold uppercase tracking-wider" style={{ color: theme.muted }}>{question.type.replaceAll("-", " ")}</p>}{isTextAnswer ? <input type="text" value={String(answers[index] ?? "")} disabled={submitted} onChange={(event) => setAnswers({ ...answers, [index]: event.target.value })} placeholder="Type your answer" className="mt-3 h-12 w-full rounded-xl border px-4 text-sm outline-none" style={{ borderColor: theme.border, background: theme.page, color: theme.ink }} /> : !isSwipeChoice && <div className="mt-3 grid gap-2 sm:grid-cols-2">{question.options.map((option, optionIndex) => { const selected = answers[index] === optionIndex; const correctOption = typeof question.answer === "number" ? optionIndex === question.answer : option.trim().toLocaleLowerCase() === question.answer.trim().toLocaleLowerCase(); const wrongSelected = revealResult && selected && !earnedPoint; const answerStyle = wrongSelected ? { borderColor: "#d56b73", background: theme.dark ? "#472a30" : "#fff0f0", color: theme.ink } : revealResult && correctOption ? { borderColor: "#5b9b70", background: theme.dark ? "#233a2d" : "#e9f5ed", color: theme.ink } : selected ? { borderColor: theme.accent, background: theme.accent + "14", color: theme.ink } : { borderColor: theme.border, background: "transparent", color: theme.ink }; return <label key={option} className="flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm leading-relaxed transition-colors" style={answerStyle}><input type="radio" name={"question-" + index} value={optionIndex} checked={selected} disabled={submitted} onChange={() => setAnswers({ ...answers, [index]: optionIndex })} className="mt-1 accent-emerald-700" /><span className="flex-1">{option}</span>{wrongSelected && <XCircle size={17} className="shrink-0 text-rose-600" aria-label="Incorrect answer" />}{revealResult && correctOption && <CheckCircle2 size={17} className="shrink-0 text-emerald-600" aria-label="Correct answer" />}</label>; })}</div>}{revealResult && <div className="mt-4 rounded-2xl border p-4 sm:p-5" style={{ borderColor: earnedPoint ? "#5b9b70" : "#d56b73", background: earnedPoint ? theme.dark ? "#20392b" : "#e9f5ed" : theme.dark ? "#40272c" : "#fff0f0" }}><div className="flex items-center gap-2">{earnedPoint ? <CheckCircle2 size={20} className="shrink-0" style={{ color: theme.dark ? "#a2d9af" : "#286b43" }} /> : <XCircle size={20} className="shrink-0" style={{ color: theme.dark ? "#f0a0a5" : "#ad424c" }} />}<p className="text-base font-bold" style={{ color: earnedPoint ? theme.dark ? "#a2d9af" : "#23643d" : theme.dark ? "#f0a0a5" : "#a83e48" }}>{earnedPoint ? "Correct" : "Incorrect"}</p><span className="ml-auto text-xs font-semibold" style={{ color: theme.muted }}>{exam?.gradedAt ? (exam.questionPoints?.[index] ?? 0) + " point(s)" : earnedPoint ? "1 point" : "0 points"}</span></div>{!earnedPoint && <p className="mt-3 text-sm font-semibold leading-6" style={{ color: theme.ink }}>Correct answer: {typeof question.answer === "number" ? question.options[question.answer] : question.answer}</p>}{question.explanation && <p className="mt-2 text-sm leading-6" style={{ color: theme.ink }}>{question.explanation}</p>}</div>}{submitted && exam && !exam.gradedAt && <p className="mt-3 text-sm" style={{ color: theme.muted }}>Your response has been sent for teacher review.</p>}<button type="button" aria-label={"Add note for question " + questionNumber} title="Add note" onClick={() => openNote("Question " + questionNumber + " · " + question.prompt)} className="absolute right-4 top-4 hidden rounded-full border p-2 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 sm:inline-flex" style={{ borderColor: theme.border, color: theme.accent, background: theme.surface }}><StickyNote size={14} /></button></motion.fieldset></Fragment>; })}
-      {!submitted ? isSectionedTest && activeSectionPage && activeSectionPage.section < sectionPages.length ? <button type="button" onClick={() => navigateSection(Math.min(sectionPages.length, (activeSection ?? 1) + 1))} className="mt-3 inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-bold transition hover:opacity-90" style={{ background: theme.accent, color: theme.onAccent }}>Next section <ArrowRight size={17} /></button> : <div><button onClick={() => submit()} className="mt-3 inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-bold transition hover:opacity-90" style={{ background: theme.accent, color: theme.onAccent }}>{exam ? "Submit exam" : "Check answers"} <Check size={17} /></button>{!exam && Object.keys(answers).length !== test.questions.length && <p className="mt-2 text-xs" style={{ color: theme.muted }}>Unanswered questions will count as incorrect.</p>}</div> : <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4" style={{ borderColor: theme.border, background: theme.surface }}><p className="font-semibold">{exam ? exam.gradedAt ? "Graded · " + (exam.score ?? 0) + "/" + test.questions.length + " points" : "Exam submitted. Your teacher will review it and award points." : score === test.questions.length ? "Excellent reading." : score >= 3 ? "Good work. Review any missed answers." : "Keep practicing. Read the passage once more."}</p><button onClick={onBack} className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold" style={{ background: theme.accent, color: theme.onAccent }}>{exam ? exam.gradedAt ? "Back to classroom" : "Return to classroom" : "Back to Phase 1"} <ArrowRight size={15} /></button></div>}
-    </section>
-    {submitted && !exam && Boolean(test.flashcards?.length) && <section className="mt-8 rounded-3xl border p-5 sm:p-7" style={{ borderColor: theme.border, background: theme.surface }}><div className="mb-5 flex flex-wrap items-end justify-between gap-3"><div><p className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[.16em]" style={{ color: theme.accent }}><Layers3 size={15} />After reading</p><h2 className="mt-1 font-serif text-2xl font-semibold">Vocabulary & collocations</h2><p className="mt-1 text-sm" style={{ color: theme.muted }}>Tap a card to reveal its meaning, then mark it for practice.</p></div><span className="text-sm font-semibold" style={{ color: theme.muted }}>{knownFlashcards.length}/{test.flashcards?.length ?? 0} known</span></div>{(() => { const cards = test.flashcards ?? []; const card = cards[flashcardIndex]; if (!card) return null; const known = knownFlashcards.includes(card.term.trim().toLocaleLowerCase()); return <div className="mx-auto max-w-2xl"><motion.button type="button" aria-pressed={flashcardFlipped} onClick={() => setFlashcardFlipped((value) => !value)} whileTap={reduceMotion ? undefined : { scale: 0.99 }} className="flex min-h-52 w-full flex-col items-center justify-center rounded-2xl border p-7 text-center transition-colors" style={{ borderColor: theme.accent + "55", background: theme.page, color: theme.ink }}><span className="mb-4 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider" style={{ background: theme.accent + "18", color: theme.accent }}>{card.kind === "collocation" ? "Collocation" : "Vocabulary"} · {flashcardIndex + 1} of {cards.length}</span><AnimatePresence mode="wait" initial={false}><motion.span key={flashcardFlipped ? "back" : "front"} initial={reduceMotion ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -5 }} transition={{ duration: 0.16 }} className="block"><strong className="block font-serif text-3xl">{flashcardFlipped ? card.meaning : card.term}</strong>{flashcardFlipped && card.example && <span className="mt-3 block max-w-prose text-sm leading-6" style={{ color: theme.muted }}>“{card.example}”</span>}</motion.span></AnimatePresence><span className="mt-5 inline-flex items-center gap-1 text-xs font-semibold" style={{ color: theme.muted }}><RotateCcw size={13} />Tap to {flashcardFlipped ? "see term" : "flip"}</span></motion.button><div className="mt-4 flex flex-wrap items-center justify-between gap-3"><div className="flex gap-2"><button type="button" disabled={flashcardIndex === 0} onClick={() => { setFlashcardIndex((index) => Math.max(0, index - 1)); setFlashcardFlipped(false); }} className="rounded-full border px-4 py-2.5 text-sm font-semibold disabled:opacity-40" style={{ borderColor: theme.border }}>Previous</button><button type="button" disabled={flashcardIndex >= cards.length - 1} onClick={() => { setFlashcardIndex((index) => Math.min(cards.length - 1, index + 1)); setFlashcardFlipped(false); }} className="rounded-full border px-4 py-2.5 text-sm font-semibold disabled:opacity-40" style={{ borderColor: theme.border }}>Next</button></div><div className="flex gap-2"><button type="button" onClick={() => markFlashcard(card, false)} className="rounded-full border px-4 py-2.5 text-sm font-semibold" style={{ borderColor: theme.border, color: theme.ink }}>Practice again</button><button type="button" onClick={() => markFlashcard(card, true)} className="rounded-full px-5 py-2.5 text-sm font-bold" style={{ background: theme.accent, color: theme.onAccent }}>{known ? "Known ✓" : "I know this"}</button></div></div></div>; })()}</section>}
-    {NOTES_ENABLED && notePanelOpen && <aside aria-label="Reading notes" className="fixed inset-x-3 bottom-3 z-50 max-h-[78dvh] overflow-y-auto rounded-3xl border p-5 shadow-2xl md:inset-x-auto md:inset-y-3 md:right-3 md:w-[360px]" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}><div className="mb-4 flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.accent }}>Connected notes</p><h2 className="mt-1 font-serif text-xl font-semibold">{test.title}</h2></div><button type="button" onClick={() => setNotePanelOpen(false)} aria-label="Close notes" className="rounded-full p-2" style={{ color: theme.muted }}><X size={18} /></button></div><div className="mb-4 rounded-xl px-3 py-2" style={{ background: theme.page }}><p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: theme.muted }}>Linked to</p><p className="mt-1 text-sm font-semibold">{noteContext}</p>{noteQuote && <p className="mt-1 line-clamp-3 text-xs leading-5" style={{ color: theme.muted }}>“{noteQuote}”</p>}</div><label className="block text-xs font-bold" style={{ color: theme.muted }}>Your note<textarea value={noteText} onChange={(event) => setNoteText(event.target.value)} placeholder="Write a quick thought…" rows={2} className="mt-2 w-full resize-y rounded-xl border p-3 text-sm font-normal outline-none focus:ring-2" style={{ borderColor: theme.border, background: theme.page, color: theme.ink }} /></label><div className="mt-2 flex justify-end"><button type="button" disabled={!noteText.trim()} onClick={saveNote} className="rounded-full px-4 py-2 text-sm font-bold disabled:opacity-45" style={{ background: theme.accent, color: theme.onAccent }}>Save note</button></div><div className="mt-5 border-t pt-4" style={{ borderColor: theme.border }}><p className="mb-3 text-xs font-bold uppercase tracking-wider" style={{ color: theme.muted }}>Notes for this reading · {notes.filter((note) => note.testId === test.id).length}</p><div className="space-y-2">{notes.filter((note) => note.testId === test.id).length ? notes.filter((note) => note.testId === test.id).map((note) => <article key={note.id} className="rounded-xl border-l-4 border-y border-r p-3" style={{ borderLeftColor: "#e9c96b", borderTopColor: theme.border, borderRightColor: theme.border, borderBottomColor: theme.border, background: theme.surface }}><button type="button" onClick={() => { setExpandedNoteId((current) => current === note.id ? null : note.id); setEditNoteText(note.text); }} aria-expanded={expandedNoteId === note.id} className="w-full text-left"><span className="flex items-center gap-1.5 text-xs font-bold" style={{ color: theme.accent }}><StickyNote size={13} />{note.context}</span><span className="mt-1 block line-clamp-2 text-sm leading-5" style={{ color: theme.ink }}>{note.text}</span>{note.quote && <span className="mt-1 block line-clamp-1 text-xs italic" style={{ color: theme.muted }}>“{note.quote}”</span>}</button>{expandedNoteId === note.id && <div className="mt-2"><textarea aria-label="Edit note" value={editNoteText} onChange={(event) => setEditNoteText(event.target.value)} rows={3} className="w-full resize-y rounded-lg border p-2.5 text-sm leading-5 outline-none" style={{ borderColor: theme.border, background: theme.page, color: theme.ink }} /><div className="mt-2 flex justify-end"><button type="button" disabled={!editNoteText.trim()} onClick={() => { onUpdateNote(note.id, editNoteText.trim()); setExpandedNoteId(null); }} className="rounded-full px-3 py-1.5 text-xs font-bold disabled:opacity-45" style={{ background: theme.accent, color: theme.onAccent }}>Save changes</button></div></div>}</article>) : <p className="text-sm" style={{ color: theme.muted }}>No notes yet. Select a line or tap a paragraph to add one.</p>}</div></div></aside>}
-  </motion.main>;
-}
-
-function StudentHomePage({ rememberMe, rememberedName, hasRememberedStudent, openingProfile, theme, code, error, onCodeChange, onRememberChange, onSubmit, onResumeRemembered, onTeacherLogin }: { rememberMe: boolean; rememberedName: string; hasRememberedStudent: boolean; openingProfile: boolean; theme: ReaderTheme; code: string; error: string; onCodeChange: (value: string) => void; onRememberChange: (value: boolean) => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onResumeRemembered: () => void; onTeacherLogin: () => void }) {
-  const [loginChoicesOpen, setLoginChoicesOpen] = useState(false);
-  return <motion.main initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .28, ease: "easeOut" }} className="mx-auto flex min-h-[calc(100dvh-120px)] w-full max-w-5xl items-center justify-center py-10 sm:py-16">
-    <section className="grid w-full overflow-hidden rounded-[2rem] border shadow-sm md:grid-cols-[1.1fr_.9fr]" style={{ borderColor: theme.border, background: theme.surface }}>
-      <div className="flex flex-col justify-center p-6 sm:p-10 md:p-12"><p className="text-xs font-bold uppercase tracking-[.18em]" style={{ color: theme.accent }}>Libraria · Student home</p><h1 className="mt-3 max-w-xl font-serif text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">A calm place to read, learn, and grow.</h1><p className="mt-4 max-w-lg text-sm leading-7" style={{ color: theme.muted }}>Enter the 9-digit student code from your teacher to open your personal reading library and assigned exams.</p><form onSubmit={onSubmit} className="mt-7 max-w-md space-y-3"><label htmlFor="home-student-code" className="block text-xs font-bold uppercase tracking-wider" style={{ color: theme.muted }}>Your student code<input id="home-student-code" value={code} onChange={(event) => onCodeChange(event.target.value.replace(/\D/g, "").slice(0, 9))} maxLength={9} inputMode="numeric" autoComplete="off" placeholder="123456789" className="mt-2 h-14 w-full rounded-xl border px-4 font-mono text-lg font-bold tracking-[.25em] outline-none transition focus:ring-2" style={{ borderColor: theme.border, background: theme.page, color: theme.ink }} /></label><label className="inline-flex min-h-8 cursor-pointer items-center gap-2 text-sm" style={{ color: theme.ink }}><input type="checkbox" checked={rememberMe} onChange={(event) => onRememberChange(event.target.checked)} className="h-4 w-4 accent-current" />Remember me on this device</label>{error && <p role="alert" className="text-sm" style={{ color: theme.dark ? "#f0a0a5" : "#ad424c" }}>{error}</p>}<button type="submit" disabled={code.length !== 9 || openingProfile} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-45" style={{ background: theme.accent, color: theme.onAccent }}>{openingProfile ? "Opening profile…" : "Open my profile"} <ArrowRight size={16} /></button></form><p className="mt-4 text-xs" style={{ color: theme.muted }}>No code yet? Ask your teacher to create your student profile.</p></div>
-      <div className="flex flex-col justify-between gap-8 border-t p-6 sm:p-10 md:border-l md:border-t-0" style={{ borderColor: theme.border, background: theme.page }}><div><div className="grid h-12 w-12 place-items-center rounded-2xl" style={{ background: theme.accent, color: theme.onAccent }}><BookOpen size={22} /></div><p className="mt-8 text-xs font-bold uppercase tracking-[.16em]" style={{ color: theme.accent }}>Your learning, together</p><h2 className="mt-2 font-serif text-2xl font-semibold">One profile. All your progress.</h2><p className="mt-3 text-sm leading-6" style={{ color: theme.muted }}>Your teacher’s reading materials, exam assignments, and reviewed results stay organized under your name.</p></div><div className="space-y-3">{hasRememberedStudent && <section className="rounded-2xl border p-3" style={{ borderColor: theme.border, background: theme.surface }}><p className="px-1 text-xs font-semibold" style={{ color: theme.muted }}>Already using this device?</p><button type="button" onClick={onResumeRemembered} disabled={openingProfile} className="mt-2 inline-flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border px-3 text-sm font-semibold transition hover:shadow-sm disabled:opacity-60" style={{ borderColor: theme.border, color: theme.ink }}><span>Continue as <strong style={{ color: theme.accent }}>{rememberedName}</strong></span><span aria-hidden="true">{openingProfile ? "Opening…" : "→"}</span></button></section>}<div className="relative"><button type="button" aria-expanded={loginChoicesOpen} aria-haspopup="menu" onClick={() => setLoginChoicesOpen((open) => !open)} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border px-4 text-sm font-semibold transition hover:shadow-sm" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}><LockKeyhole size={15} />Login as…<ChevronDown size={14} /></button>{loginChoicesOpen && <div role="menu" className="absolute bottom-full z-10 mb-2 w-full rounded-2xl border p-2 shadow-lg" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}><button role="menuitem" type="button" onClick={() => { setLoginChoicesOpen(false); document.getElementById("home-student-code")?.focus(); }} className="block min-h-11 w-full rounded-xl px-3 text-left text-sm font-semibold hover:bg-black/5">Student <span className="ml-1 text-xs font-normal" style={{ color: theme.muted }}>Use student code</span></button><button role="menuitem" type="button" onClick={() => { setLoginChoicesOpen(false); onTeacherLogin(); }} className="block min-h-11 w-full rounded-xl px-3 text-left text-sm font-semibold hover:bg-black/5">Teacher <span className="ml-1 text-xs font-normal" style={{ color: theme.muted }}>Sign in to classroom</span></button></div>}</div></div></div>
-    </section>
-  </motion.main>;
-}
-
-function ScheduledAssessments({ rows, theme, now, onOpen, onViewAll, onRemind }: { rows: StudentExamRow[]; theme: ReaderTheme; now: number; onOpen: (assignment: ExamAssignment) => void; onViewAll: () => void; onRemind: (assignment: ExamAssignment, test: ReadingTest) => void }) {
-  if (!rows.length) return null;
-  return <section aria-labelledby="scheduled-assessments-title" className="mb-8">
-    <div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><span className="inline-flex rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[.14em]" style={{ color: theme.onAccent, background: theme.accent }}>Upcoming assessments</span><h2 id="scheduled-assessments-title" className="mt-2 font-serif text-2xl font-semibold">Scheduled exams</h2><p className="mt-1 text-sm" style={{ color: theme.muted }}>Your teacher-assigned timed reading tests, all in one place.</p></div><span className="rounded-full border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: theme.border, color: theme.muted }}>{rows.length} {rows.length === 1 ? "exam" : "exams"} to do</span></div>
-    <div className="scheduled-grid grid gap-3 lg:grid-cols-2">{rows.map(({ assignment, test, startsAt, endsAt }) => { const available = now >= startsAt; const inProgress = Boolean(assignment.startedAt); const status = inProgress ? "In progress" : available ? "Available now" : `Opens ${new Date(startsAt).toLocaleString()}`; const sectionCount = test.passages?.length ?? 1; return <article key={assignment.id} className="exam-card rounded-2xl border p-5 shadow-sm" style={{ borderColor: theme.border, background: theme.surface }}><div className="flex flex-wrap items-center justify-between gap-2"><span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold" style={{ background: available ? theme.accent : theme.page, color: available ? theme.onAccent : theme.ink }}><CalendarClock size={14} />{status}</span><span className="text-xs font-semibold" style={{ color: theme.muted }}>{assignment.durationMinutes} min</span></div><h3 className="mt-4 font-serif text-xl font-semibold leading-snug">{test.title}</h3><p className="mt-1 text-sm" style={{ color: theme.muted }}>{test.topic}</p><div className="mt-4 flex flex-wrap gap-2">{[`${sectionCount} ${sectionCount === 1 ? "passage" : "passages"}`, `${test.questions.length} questions`, `Due ${new Date(endsAt).toLocaleDateString()}`].map((tag) => <span key={tag} className="rounded-full px-3 py-1.5 text-xs font-medium" style={{ background: theme.page, color: theme.muted }}>{tag}</span>)}</div><div className="mt-5 flex flex-wrap gap-2"><button type="button" onClick={() => available ? onOpen(assignment) : onViewAll()} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-5 text-sm font-bold" style={{ background: available ? theme.accent : theme.page, color: available ? theme.onAccent : theme.ink }}>{available ? inProgress ? "Resume exam" : "Start exam" : "View exam details"}<ArrowRight size={15} /></button><button type="button" onClick={() => onRemind(assignment, test)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border px-4 text-sm font-semibold" style={{ borderColor: theme.border, color: theme.ink }}><CalendarClock size={15} />Add reminder</button></div></article>; })}</div>
-  </section>;
-}
-
 function ExamHistoryPreview({ rows, theme, onViewAll }: { rows: StudentExamRow[]; theme: ReaderTheme; onViewAll: () => void }) {
   if (!rows.length) return null;
   return <section aria-labelledby="exam-history-title" className="mb-10"><div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.16em]" style={{ color: theme.accent }}>Completed & past</p><h2 id="exam-history-title" className="mt-1 font-serif text-2xl font-semibold">Exam history</h2><p className="mt-1 text-sm" style={{ color: theme.muted }}>Recent results and work waiting for teacher review.</p></div><button type="button" onClick={onViewAll} className="rounded-full border px-4 py-2 text-sm font-semibold" style={{ borderColor: theme.border, color: theme.ink }}>View all exams <ArrowRight className="ml-1 inline" size={14} /></button></div><div className="grid gap-3 md:grid-cols-2">{rows.slice(0, 4).map(({ assignment, test, expired }) => { const status = assignment.gradedAt ? "Graded" : assignment.completedAt ? "Waiting for review" : expired ? "Missed" : "Past"; const statusColor = assignment.gradedAt ? (theme.dark ? "#9bd5a6" : "#27734a") : assignment.completedAt ? "#a95e18" : theme.muted; return <article key={assignment.id} className="flex items-center justify-between gap-4 rounded-2xl border p-4" style={{ borderColor: theme.border, background: theme.surface }}><div className="min-w-0"><span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: statusColor }}>{status}</span><h3 className="mt-1 truncate font-semibold">{test.title}</h3><p className="mt-1 text-xs" style={{ color: theme.muted }}>{assignment.completedAt ? `Submitted ${new Date(assignment.completedAt).toLocaleDateString()}` : `Due ${new Date(assignment.startsAt).toLocaleDateString()}`}{assignment.gradedAt ? ` · ${assignment.score ?? 0}/${test.questions.length} points` : ""}</p>{assignment.teacherFeedback && <p className="mt-1 line-clamp-1 text-xs" style={{ color: theme.muted }}>{assignment.teacherFeedback}</p>}</div><span className="shrink-0 rounded-full px-3 py-1.5 text-xs font-bold" style={{ background: statusColor + "18", color: statusColor }}>{assignment.gradedAt ? `${assignment.score ?? 0}/${test.questions.length}` : status}</span></article>; })}</div></section>;
-}
-
-function StudentExamsPage({ assignments, tests, studentId, theme, onOpenExam, onBackToLibrary }: { assignments: ExamAssignment[]; tests: ReadingTest[]; studentId: string; theme: ReaderTheme; onOpenExam: (assignment: ExamAssignment) => void; onBackToLibrary: () => void }) {
-  const [filter, setFilter] = useState<"all" | "todo" | "waiting" | "past">("all");
-  const now = Date.now();
-  const rows = assignments.flatMap((assignment) => {
-    const test = tests.find((item) => item.id === assignment.testId);
-    if (assignment.studentId !== studentId || !test || test.status !== "published") return [];
-    const start = new Date(assignment.startsAt).getTime();
-    const end = Math.min(start + assignment.durationMinutes * 60_000, assignment.closesAt ? new Date(assignment.closesAt).getTime() : Number.POSITIVE_INFINITY);
-    const expired = now >= end && !assignment.completedAt;
-    const status = assignment.gradedAt ? "Graded" : assignment.completedAt ? "Waiting for review" : expired ? "Missed" : assignment.startedAt ? "In progress" : now >= start ? "Available" : "Upcoming";
-    return [{ assignment, test, expired, status }];
-  }).sort((a, b) => new Date(b.assignment.startsAt).getTime() - new Date(a.assignment.startsAt).getTime());
-  const counts = { all: rows.length, todo: rows.filter((row) => !row.assignment.completedAt && !row.expired).length, waiting: rows.filter((row) => row.assignment.completedAt && !row.assignment.gradedAt).length, past: rows.filter((row) => Boolean(row.assignment.gradedAt) || row.expired).length };
-  const filtered = rows.filter((row) => filter === "all" || filter === "todo" && !row.assignment.completedAt && !row.expired || filter === "waiting" && row.assignment.completedAt && !row.assignment.gradedAt || filter === "past" && (Boolean(row.assignment.gradedAt) || row.expired));
-  const tabs = [{ id: "all" as const, label: "All exams" }, { id: "todo" as const, label: "To do" }, { id: "waiting" as const, label: "Waiting for review" }, { id: "past" as const, label: "Past exams" }];
-
-  return <main className="mx-auto w-full max-w-4xl pb-16 pt-8 sm:pt-12">
-    <div className="mb-7 flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[.16em]" style={{ color: theme.accent }}>Student workspace · {rows.length} assigned</p><h1 className="mt-1 font-serif text-4xl font-semibold tracking-tight">Your exams</h1><p className="mt-2 text-sm" style={{ color: theme.muted }}>Upcoming work, submissions waiting for review, and your past results.</p></div><button type="button" onClick={onBackToLibrary} className="rounded-full border px-4 py-2.5 text-sm font-semibold" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}>Reading library</button></div>
-    <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4">{tabs.map((tab) => <button key={tab.id} type="button" aria-pressed={filter === tab.id} onClick={() => setFilter(tab.id)} className="rounded-2xl border p-3 text-left transition" style={{ borderColor: filter === tab.id ? theme.accent : theme.border, background: filter === tab.id ? theme.accent + "12" : theme.surface }}><p className="text-[11px] font-semibold" style={{ color: theme.muted }}>{tab.label}</p><p className="mt-1 text-2xl font-bold tabular-nums">{counts[tab.id]}</p></button>)}</div>
-    {filtered.length === 0 ? <section className="rounded-3xl border p-8 text-center sm:p-12" style={{ borderColor: theme.border, background: theme.surface }}><h2 className="font-serif text-2xl font-semibold">{rows.length ? "Nothing in this list yet" : "No exams assigned yet"}</h2><p className="mt-2 text-sm" style={{ color: theme.muted }}>{rows.length ? "Choose another filter to see your exam activity." : "Your teacher’s assigned exams will appear here."}</p></section> : <div className="space-y-3">{filtered.map(({ assignment, test, expired, status }) => { const completed = Boolean(assignment.completedAt); const graded = Boolean(assignment.gradedAt); const available = !completed && !expired && now >= new Date(assignment.startsAt).getTime(); const statusColor = graded ? "#27734a" : completed ? "#a95e18" : expired ? theme.muted : assignment.startedAt ? "#286283" : theme.accent; const startLabel = assignment.startedAt ? `Started ${new Date(assignment.startedAt).toLocaleString()}` : `Opens ${new Date(assignment.startsAt).toLocaleString()}`; const endTime = Math.min(new Date(assignment.startsAt).getTime() + assignment.durationMinutes * 60_000, assignment.closesAt ? new Date(assignment.closesAt).getTime() : Number.POSITIVE_INFINITY); const endLabel = completed && assignment.completedAt ? `Submitted ${new Date(assignment.completedAt).toLocaleString()}` : Number.isFinite(endTime) ? `Due ${new Date(endTime).toLocaleString()}` : `${assignment.durationMinutes} minute limit`; return <article key={assignment.id} className="rounded-2xl border p-4 sm:p-5" style={{ borderColor: graded ? "#27734a55" : theme.border, background: theme.surface }}><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider" style={{ background: statusColor + "18", color: statusColor }}>{status}</span><span className="text-xs" style={{ color: theme.muted }}>Phase {test.phase ?? 1} · {assignment.durationMinutes} min</span></div><h2 className="mt-2 font-serif text-xl font-semibold">{test.title}</h2><div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: theme.muted }}><span>{startLabel}</span><span>{endLabel}</span></div>{graded && <p className="mt-2 text-sm font-semibold" style={{ color: statusColor }}>Score · {assignment.score ?? 0}/{test.questions.length}</p>}</div><button type="button" disabled={completed && !graded || expired || !available && !graded} onClick={() => onOpenExam(assignment)} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50" style={{ background: available || assignment.startedAt && !completed ? theme.accent : graded ? theme.surface : theme.page, color: available || assignment.startedAt && !completed ? theme.onAccent : theme.ink, border: graded ? `1px solid ${theme.border}` : undefined }}>{graded ? "Review answers" : completed ? "Waiting for review" : expired ? "Expired" : assignment.startedAt ? "Resume exam" : available ? "Start exam" : "Not open yet"}{(available || assignment.startedAt && !completed || graded) && <ArrowRight size={15} />}</button></div></article>; })}</div>}
-  </main>;
 }
 
 export function ReadingApp() {
@@ -479,11 +112,12 @@ export function ReadingApp() {
   const [teacherAuthenticated, setTeacherAuthenticated] = useState(false);
   const [teachingPointer, setTeachingPointer] = useState<TeachingPointer | null>(null);
   const teachingChannel = useRef<BroadcastChannel | null>(null);
-  const [clockNow, setClockNow] = useState(Date.now());
+  const [clockNow, setClockNow] = useState(() => Date.now());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [headerVisible, setHeaderVisible] = useState(true);
   const [cloudStatus, setCloudStatus] = useState<"local" | "syncing" | "connected" | "error">("local");
+  const [localDataReady, setLocalDataReady] = useState(false);
   const remoteHydrated = useRef(false);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "unread" | "saved" | "read">("all");
@@ -545,6 +179,7 @@ export function ReadingApp() {
           setCloudStatus("connected");
         }
       } catch { /* Local reading mode remains available when no cloud connection is configured. */ }
+      finally { if (alive) setLocalDataReady(true); }
     };
     void syncExistingStudent();
     const refresh = window.setInterval(() => { void syncExistingStudent(); }, 15_000);
@@ -741,7 +376,6 @@ export function ReadingApp() {
 
   const theme = designStyles[preferences.designStyle][preferences.theme];
   const studentGreen = theme.dark ? "#8bc99e" : theme.accent;
-  const studentGreenText = theme.dark ? "#18211c" : "#ffffff";
   const classroomTheme: ReaderTheme = theme;
   const frameTheme = teacherMode ? classroomTheme : theme;
   const current = active ? englishCurriculum[active.unit]?.lessons[active.lesson] : null;
@@ -759,20 +393,15 @@ export function ReadingApp() {
     const matchesFilter = filter === "all" || (filter === "read" && progress.read.includes(key)) || (filter === "saved" && progress.saved.includes(key)) || (filter === "unread" && !progress.read.includes(key));
     return matchesQuery && matchesFilter;
   });
-  const assignedToStudent = (test: ReadingTest) => {
-    if (test.visibility === "all") return true;
-    if (test.visibility === "groups") return Boolean(selectedStudent?.groupName && test.groupNames?.includes(selectedStudent.groupName));
-    if (test.visibility === "students") return Boolean(test.studentIds?.includes(selectedStudentId));
-    return !test.studentId || test.studentId === selectedStudentId;
-  };
-  const phaseTests = allTests.filter((test) => test.status === "published" && test.kind !== "exam" && !test.timedExam && (test.kind === "ielts" || test.id.startsWith("custom-")) && (test.phase ?? 1) === activePhase && assignedToStudent(test));
+  const assignedToStudent = useCallback((test: ReadingTest) => canStudentAccessMaterial(test, selectedStudentId, selectedStudent), [selectedStudent, selectedStudentId]);
+  const phaseTests = allTests.filter((test) => isPublishedMaterial(test) && test.kind !== "exam" && !test.timedExam && (test.kind === "ielts" || test.id.startsWith("custom-")) && (test.phase ?? 1) === activePhase && assignedToStudent(test));
   const unfinishedTest = phaseTests.find((test) => (progress.testsStarted ?? []).includes(test.id) && !progress.testsDone.includes(test.id) && (!test.opensAt || clockNow >= new Date(test.opensAt).getTime()) && (!test.closesAt || clockNow <= new Date(test.closesAt).getTime()));
   const heroTest = unfinishedTest ?? phaseTests.find((test) => (!test.opensAt || clockNow >= new Date(test.opensAt).getTime()) && (!test.closesAt || clockNow <= new Date(test.closesAt).getTime())) ?? null;
   const visibleTests = phaseTests.filter((test) => (test.title + " " + test.topic).toLowerCase().includes(query.toLowerCase()));
   const practiceTests = phaseTests.filter((test) => (!test.opensAt || clockNow >= new Date(test.opensAt).getTime()) && (!test.closesAt || clockNow <= new Date(test.closesAt).getTime()));
   const assignedExamRows = assignments.flatMap((assignment) => {
     const test = allTests.find((item) => item.id === assignment.testId);
-    if (assignment.studentId !== selectedStudentId || !test || test.status !== "published") return [];
+    if (assignment.studentId !== selectedStudentId || !test || !isPublishedMaterial(test)) return [];
     const startsAt = new Date(assignment.startsAt).getTime();
     const endsAt = Math.min(startsAt + assignment.durationMinutes * 60_000, assignment.closesAt ? new Date(assignment.closesAt).getTime() : Number.POSITIVE_INFINITY);
     const expired = !assignment.completedAt && clockNow >= endsAt;
@@ -784,24 +413,24 @@ export function ReadingApp() {
   const practiceStageIndex = ({ home: 0, test: 1, section: 2, setup: 3 } as const)[practiceStep];
   const selectedVocabularyCount = readingVocabularyDecks.filter((deck) => practiceSections.includes(deck.section)).reduce((total, deck) => total + deck.cards.length, 0);
   const maxPracticeCards = Math.max(1, selectedVocabularyCount);
-  const restoreAppRoute = () => {
-    let route = readPracticeLocation();
-    let segments = route.path.split("/").filter(Boolean).map((part) => decodeURIComponent(part));
-    const knownTeacherTabs = ["students", "materials", "teach", "exams", "settings"];
-    const knownStaticRoutes = ["/", "/library", "/profile", "/settings", "/teacher", "/teacher/style", "/exams", "/demo", "/practice", "/practice/tests", "/practice/sections", "/practice/setup", "/flashcards"];
-    const validRoute = knownStaticRoutes.includes(route.path)
-      || (segments[0] === "teacher" && segments.length === 2 && knownTeacherTabs.includes(segments[1]))
-      || (segments[0] === "reading" && segments.length === 2 && allTests.some((test) => test.id === segments[1]))
-      || (segments[0] === "exam" && segments.length === 2 && assignments.some((assignment) => assignment.id === segments[1]));
+  const restoreAppRoute = useCallback(() => {
+    let route = parsePracticeLocation(window.location.pathname, window.location.search);
+    const decodedSegments = decodeRouteSegments(route.path);
+    let segments = decodedSegments ?? [];
+    const pathTest = segments[0] === "reading" ? allTests.find((test) => test.id === segments[1]) : undefined;
+    const pathAssignment = segments[0] === "exam" ? assignments.find((assignment) => assignment.id === segments[1]) : undefined;
+    const assignedTest = pathAssignment ? allTests.find((test) => test.id === pathAssignment.testId) : undefined;
+    const validRoute = decodedSegments !== null
+      && isKnownAppPath(route.path, segments, new Set(allTests.map((test) => test.id)), new Set(assignments.map((assignment) => assignment.id)))
+      && (segments[0] !== "reading" || Boolean(pathTest && isPublishedMaterial(pathTest) && pathTest.kind !== "exam" && !pathTest.timedExam && assignedToStudent(pathTest)))
+      && (segments[0] !== "exam" || Boolean(pathAssignment && assignedTest && canStudentOpenExam(pathAssignment, selectedStudentId, assignedTest, clockNow)));
     if (!validRoute) {
       window.history.replaceState({}, "", "/");
-      route = readPracticeLocation();
+      route = parsePracticeLocation(window.location.pathname, window.location.search);
       segments = [];
     }
     const isLegacyPracticeRoute = new URLSearchParams(window.location.search).has("practice");
     const isPracticeRoute = segments[0] === "practice" || isLegacyPracticeRoute;
-    const teacherTabByPath: Record<string, TeacherTab> = { students: "students", materials: "materials", teach: "teach", exams: "exams", settings: "settings" };
-
     setPracticeStep(isPracticeRoute ? route.step : "home");
     if (route.testId) setSelectedPracticeTestId(route.testId);
     setPracticeSections(route.sections);
@@ -841,8 +470,8 @@ export function ReadingApp() {
     } else {
       setStudentPage("home");
     }
-    return teacherTabByPath[segments[1] ?? ""] ?? "students";
-  };
+    return teacherTabs.includes(segments[1] as TeacherTab) ? segments[1] as TeacherTab : "students";
+  }, [allTests, assignments, assignedToStudent, clockNow, selectedStudentId]);
   const navigateToPath = (path: string, replace = false) => {
     const target = new URL(path, window.location.origin);
     window.history[replace ? "replaceState" : "pushState"]({}, "", target);
@@ -861,11 +490,12 @@ export function ReadingApp() {
     return ({ students: "students", materials: "materials", teach: "teach", exams: "exams", settings: "settings" } as Record<string, TeacherTab>)[segment] ?? "students";
   })();
   useEffect(() => {
+    if (!localDataReady) return;
     const restoreFromUrl = () => { restoreAppRoute(); };
     restoreFromUrl();
     window.addEventListener("popstate", restoreFromUrl);
     return () => window.removeEventListener("popstate", restoreFromUrl);
-  }, []);
+  }, [localDataReady, restoreAppRoute]);
   useEffect(() => {
     if (!activeExamId) return;
     const assignment = assignments.find((item) => item.id === activeExamId);
@@ -881,7 +511,7 @@ export function ReadingApp() {
     if (options.sections) setPracticeSections(options.sections);
     if (options.count !== undefined) setPracticeQuestionCount(options.count);
 
-    const url = new URL(step === "home" ? "/practice" : step === "test" ? "/practice/tests" : step === "section" ? "/practice/sections" : "/practice/setup", window.location.origin);
+    const url = new URL(practicePath(step), window.location.origin);
     if (step !== "home") {
       if (step === "section" || step === "setup") {
         if (nextTestId) url.searchParams.set("test", nextTestId);
@@ -903,19 +533,6 @@ export function ReadingApp() {
   const savePreferences = (next: Preferences) => {
     setPreferences(next);
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
-  };
-  const downloadExamReminder = (assignment: ExamAssignment, test: ReadingTest) => {
-    const start = new Date(assignment.startsAt);
-    const end = new Date(Math.min(start.getTime() + assignment.durationMinutes * 60_000, assignment.closesAt ? new Date(assignment.closesAt).getTime() : start.getTime() + assignment.durationMinutes * 60_000));
-    const formatIcsDate = (date: Date) => date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
-    const escapeIcs = (value: string) => value.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
-    const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Libraria//Exam Reminder//EN", "BEGIN:VEVENT", `UID:${assignment.id}@libraria`, `DTSTAMP:${formatIcsDate(new Date())}`, `DTSTART:${formatIcsDate(start)}`, `DTEND:${formatIcsDate(end)}`, `SUMMARY:${escapeIcs(test.title)}`, `DESCRIPTION:${escapeIcs(`${test.topic} · ${test.questions.length} questions · ${assignment.durationMinutes} minutes`)}`, "BEGIN:VALARM", "TRIGGER:-PT1H", "ACTION:DISPLAY", `DESCRIPTION:${escapeIcs(`Libraria exam reminder: ${test.title}`)}`, "END:VALARM", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
-    const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${test.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "libraria-exam"}.ics`;
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   const updateProgress = (next: Progress) => {
     setProgress(next);
@@ -1090,6 +707,8 @@ export function ReadingApp() {
     persistTeacherMaterials(nextTests);
   };
   const beginExam = (assignment: ExamAssignment) => {
+    const test = allTests.find((item) => item.id === assignment.testId);
+    if (!test || !canStudentOpenExam(assignment, selectedStudentId, test, clockNow)) return;
     const now = new Date().toISOString();
     const shouldMarkStarted = !assignment.startedAt;
     const shouldMarkReviewed = Boolean(assignment.gradedAt && !assignment.reviewedAt);
@@ -1229,7 +848,7 @@ export function ReadingApp() {
         </motion.header>
 
         <AnimatePresence mode="wait" initial={false}>
-    {teacherMode ? teacherAuthenticated ? <TeacherDashboard key="teacher-dashboard" students={students} assignments={assignments} tests={allTests} theme={classroomTheme} initialTab={currentTeacherTab} onTabChange={(tab) => navigateToPath(tab === "students" ? "/teacher" : `/teacher/${tab}`)} onAddStudent={addStudent} onDeleteStudent={deleteStudent} onUpdateStudentCode={updateStudentCode} onToggleStudentPhase={toggleStudentPhase} onCreateAssignments={createAssignments} onCreateTest={createTeacherTest} onPublishMaterial={publishTeacherTest} onUnpublishMaterial={unpublishTeacherTest} onUpdateMaterial={(testId, updates) => { const next = allTests.map((item) => item.id === testId ? { ...item, ...updates } : item); setAllTests(next); persistTeacherMaterials(next); }} onGradeAssignment={gradeAssignment} onTeachPointer={publishTeachingPointer} onBack={() => { publishTeachingPointer(null); void signOutTeacher(); }} /> : <TeacherLoginGate theme={classroomTheme} onCancel={() => navigateToPath("/")} onAuthenticated={() => setTeacherAuthenticated(true)} /> : studentPage === "home" ? <StudentHomePage rememberMe={rememberStudent} rememberedName={students.find((profile) => profile.joinCode === rememberedStudentCode)?.name ?? "your profile"} hasRememberedStudent={rememberStudent && rememberedStudentCode.length === 9} openingProfile={studentLoginLoading} theme={theme} code={studentCodeInput} error={studentCodeError} onCodeChange={(value) => { setStudentCodeInput(value); setStudentCodeError(""); }} onRememberChange={(value) => { setRememberStudent(value); localStorage.setItem("libaria-remember-student", String(value)); if (!value) { localStorage.removeItem(REMEMBERED_STUDENT_CODE_KEY); setRememberedStudentCode(""); setStudentCodeInput(""); } }} onSubmit={joinStudentProfile} onResumeRemembered={() => { setStudentCodeError(""); void openStudentProfile(rememberedStudentCode); }} onTeacherLogin={() => navigateToPath("/teacher")} /> : practiceSession ? <FlashcardPracticeView cards={practiceSession} theme={theme} onClose={() => { setPracticeSession(null); navigatePractice("home"); }} /> : activeTest ? <ReadingTestView key={activeTest.id + (activeExamId ?? "")} test={activeTest} theme={theme} preferences={preferences} exam={activeExam} studentId={selectedStudentId} draft={activeExam ? undefined : progress.testDrafts[activeTest.id]} notes={readingNotes} teacherPointer={teachingPointer} onDraftChange={persistTestDraft} onAddNote={addReadingNote} onUpdateNote={updateReadingNote} onBack={() => { navigateToPath(activeExamId ? "/exams" : "/library"); }} onComplete={(score, answers) => completeTest(activeTest, score, answers)} /> : studentPage === "exams" ? <StudentExamsPage assignments={assignments} tests={allTests} studentId={selectedStudentId} theme={theme} onOpenExam={beginExam} onBackToLibrary={() => navigateToPath("/library")} /> : active && current ? <motion.main key={"read-" + currentKey} initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -8 }} transition={{ type: "spring", stiffness: 280, damping: 30 }} className="mx-auto pb-16 pt-10" style={{ maxWidth: preferences.width === "narrow" ? 740 : 920 }}>
+    {teacherMode ? teacherAuthenticated ? <TeacherDashboard key="teacher-dashboard" students={students} assignments={assignments} tests={allTests} theme={classroomTheme} initialTab={currentTeacherTab} onTabChange={(tab) => navigateToPath(tab === "students" ? "/teacher" : `/teacher/${tab}`)} onAddStudent={addStudent} onDeleteStudent={deleteStudent} onUpdateStudentCode={updateStudentCode} onToggleStudentPhase={toggleStudentPhase} onCreateAssignments={createAssignments} onCreateTest={createTeacherTest} onPublishMaterial={publishTeacherTest} onUnpublishMaterial={unpublishTeacherTest} onUpdateMaterial={(testId, updates) => { const next = allTests.map((item) => item.id === testId ? { ...item, ...updates } : item); setAllTests(next); persistTeacherMaterials(next); }} onGradeAssignment={gradeAssignment} onTeachPointer={publishTeachingPointer} onBack={() => { publishTeachingPointer(null); void signOutTeacher(); }} /> : <TeacherLoginGate theme={classroomTheme} onCancel={() => navigateToPath("/")} onAuthenticated={() => setTeacherAuthenticated(true)} /> : studentPage === "home" ? <StudentHomePage rememberMe={rememberStudent} rememberedName={students.find((profile) => profile.joinCode === rememberedStudentCode)?.name ?? "your profile"} hasRememberedStudent={rememberStudent && rememberedStudentCode.length === 9} openingProfile={studentLoginLoading} theme={theme} code={studentCodeInput} error={studentCodeError} onCodeChange={(value) => { setStudentCodeInput(value); setStudentCodeError(""); }} onRememberChange={(value) => { setRememberStudent(value); localStorage.setItem("libaria-remember-student", String(value)); if (!value) { localStorage.removeItem(REMEMBERED_STUDENT_CODE_KEY); setRememberedStudentCode(""); setStudentCodeInput(""); } }} onSubmit={joinStudentProfile} onResumeRemembered={() => { setStudentCodeError(""); void openStudentProfile(rememberedStudentCode); }} onTeacherLogin={() => navigateToPath("/teacher")} /> : practiceSession ? <FlashcardPracticeView cards={practiceSession} theme={theme} onClose={() => { setPracticeSession(null); navigatePractice("home"); }} /> : activeTest ? <ReadingTestView key={activeTest.id + (activeExamId ?? "")} test={activeTest} theme={theme} preferences={preferences} exam={activeExam} studentId={selectedStudentId} draft={activeExam ? undefined : progress.testDrafts[activeTest.id]} notes={readingNotes} teacherPointer={teachingPointer} onDraftChange={persistTestDraft} onAddNote={addReadingNote} onUpdateNote={updateReadingNote} onBack={() => { navigateToPath(activeExamId ? "/exams" : "/library"); }} onComplete={(score, answers) => completeTest(activeTest, score, answers)} /> : studentPage === "exams" ? <StudentExamsPage assignments={assignments} tests={allTests} studentId={selectedStudentId} theme={theme} now={clockNow} onOpenExam={beginExam} onBackToLibrary={() => navigateToPath("/library")} /> : active && current ? <motion.main key={"read-" + currentKey} initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -8 }} transition={{ type: "spring", stiffness: 280, damping: 30 }} className="mx-auto pb-16 pt-10" style={{ maxWidth: preferences.width === "narrow" ? 740 : 920 }}>
           <div className={preferences.focus ? "mb-10 text-center" : "mb-10"}>
             <p className="mb-3 text-xs font-bold uppercase tracking-[.18em]" style={{ color: theme.accent }}>{englishCurriculum[active.unit].title}</p>
             <h1 className="font-serif text-4xl font-semibold tracking-tight sm:text-5xl">{current.title}</h1>

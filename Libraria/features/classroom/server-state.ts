@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { isSharedStateKey, isStudentOwnedStateKey } from "@/features/classroom/state-keys";
 
 export const TEACHER_COOKIE = "libraria_teacher_session";
 export const STUDENT_COOKIE = "libraria_student_session";
@@ -131,6 +132,20 @@ export async function applySharedClassroomPatch(patch: SharedClassroomState) {
   if (!response.ok) throw new Error(`Supabase write failed (${response.status}).`);
 }
 
+export async function bootstrapSharedClassroom(patch: SharedClassroomState) {
+  if (!supabaseServerConfigured()) throw new Error("Supabase server environment variables are missing.");
+  const url = getSupabaseUrl();
+  const key = process.env.SUPABASE_SECRET_KEY!;
+  const response = await fetch(`${url}/rest/v1/rpc/libraria_bootstrap_state`, {
+    method: "POST",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ p_patch: patch }),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Supabase bootstrap failed (${response.status}).`);
+  return response.json() as Promise<boolean>;
+}
+
 export async function saveStudentAssignments(studentId: string, assignments: string) {
   if (!supabaseServerConfigured()) throw new Error("Supabase server environment variables are missing.");
   const url = getSupabaseUrl();
@@ -160,9 +175,7 @@ export function parseStateValue<T>(state: SharedClassroomState, key: string, fal
   try { return JSON.parse(value) as T; } catch { return fallback; }
 }
 
-export function isSharedStateKey(key: string) {
-  return key === "libaria-students" || key === "libaria-exam-assignments" || key === "libaria-custom-reading-tests" || key === "libaria-teaching-pointer" || /^libaria-progress-[\w-]+$/.test(key) || /^libaria-reading-notes-[\w-]+$/.test(key) || /^libaria-flashcards-[\w-]+$/.test(key);
-}
+export { isSharedStateKey, isStudentOwnedStateKey };
 
 export function studentState(state: SharedClassroomState, studentId: string): SharedClassroomState {
   const roster = parseStateValue<Array<Record<string, unknown>>>(state, "libaria-students", []);

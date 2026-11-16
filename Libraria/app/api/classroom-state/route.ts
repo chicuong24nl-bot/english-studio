@@ -2,8 +2,10 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import {
   applySharedClassroomPatch,
+  bootstrapSharedClassroom,
   getSharedClassroomState,
   isSharedStateKey,
+  isStudentOwnedStateKey,
   readStudentSession,
   saveStudentAssignments,
   sameOriginRequest,
@@ -62,20 +64,19 @@ export async function POST(request: Request) {
   try {
     if (teacher) {
       if (body.action === "bootstrap") {
-        const current = await getSharedClassroomState();
-        if (current["libaria-students"]) return NextResponse.json({ error: "The online classroom already has data." }, { status: 409 });
+        const created = await bootstrapSharedClassroom(patch);
+        if (!created) return NextResponse.json({ error: "The online classroom already has data." }, { status: 409 });
       } else if (body.action !== "save") {
         return NextResponse.json({ error: "Unknown save action." }, { status: 400 });
+      } else {
+        await applySharedClassroomPatch(patch);
       }
-      await applySharedClassroomPatch(patch);
       return NextResponse.json({ saved: true });
     }
 
-    const allowedProgressKey = `libaria-progress-${studentId}`;
-    const allowedNotesKey = `libaria-reading-notes-${studentId}`;
     const safePatch: SharedClassroomState = {};
     for (const [key, value] of Object.entries(patch)) {
-      if (key === allowedProgressKey || key === allowedNotesKey || key.startsWith(`libaria-flashcards-${studentId}-`)) {
+      if (isStudentOwnedStateKey(key, studentId!)) {
         safePatch[key] = value;
       } else if (key === "libaria-exam-assignments") {
         await saveStudentAssignments(studentId!, value);

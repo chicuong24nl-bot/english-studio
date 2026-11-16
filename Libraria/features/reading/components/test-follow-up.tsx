@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Clipboard, Eye, Users } from "lucide-react";
 import type { ReadingTest } from "@/features/reading/data/reading-tests";
 import type { ExamAssignment, StudentProfile } from "@/features/classroom/data-model";
+import { isPublishedMaterial } from "@/features/reading/data/material-policy";
 
 type Theme = { page: string; surface: string; ink: string; muted: string; border: string; accent: string; onAccent: string };
 
@@ -17,7 +18,7 @@ export function IELTSTestFollowUp({ tests, assignments, students, theme, onRevie
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const ieltsTests = tests.filter((test) => test.kind === "ielts" && test.status !== "draft" && assignments.some((assignment) => assignment.testId === test.id));
+  const ieltsTests = tests.filter((test) => test.kind === "ielts" && isPublishedMaterial(test) && assignments.some((assignment) => assignment.testId === test.id));
   if (!ieltsTests.length) return null;
 
   const copyReminder = async (test: ReadingTest) => {

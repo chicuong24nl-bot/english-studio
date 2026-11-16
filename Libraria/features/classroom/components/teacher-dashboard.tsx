@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { ArrowLeft, BookOpen, CalendarClock, Check, Clock3, Copy, Eye, LockKeyhole, Plus, Presentation, Search, Settings2, StickyNote, Trash2, Users, X } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { getReadingParagraphs, type ReadingFlashcard, type ReadingQuestion, type ReadingTest } from "@/features/reading/data/reading-tests";
 import { IELTSTestWizard } from "@/features/reading/components/test-builder";
 import { studentProgressKey, createLocalId, emptyStudentProgress, type ExamAssignment, type StudentProfile, type StudentProgress, type TeachingPointer } from "@/features/classroom/data-model";
 import { readingVocabularyDecks } from "@/features/reading/data/vocabulary-decks";
+import { canStudentAccessMaterial, isPublishedMaterial } from "@/features/reading/data/material-policy";
 
 type Theme = { page: string; surface: string; ink: string; muted: string; border: string; accent: string; onAccent: string };
 type TeacherSettings = { classroomName: string; defaultMaterialPhase: 1 | 2 | 3 | 4; defaultExamMinutes: number; defaultMaterialVisibility: "all" | "students" | "groups" };
@@ -206,14 +207,8 @@ export function TeacherDashboard({
     return () => { window.removeEventListener("storage", onStorage); window.removeEventListener("libaria:shared-classroom-write", onSharedWrite); };
   }, [students, tests]);
 
-  const canStudentSeeTest = (test: ReadingTest, studentId: string) => {
-    const student = students.find((item) => item.id === studentId);
-    if (test.visibility === "all") return true;
-    if (test.visibility === "groups") return Boolean(student?.groupName && test.groupNames?.includes(student.groupName));
-    if (test.visibility === "students") return Boolean(test.studentIds?.includes(studentId));
-    return !test.studentId || test.studentId === studentId;
-  };
-  const assignableTests = selectedStudents.length ? tests.filter((test) => test.status !== "draft" && selectedStudents.every((id) => canStudentSeeTest(test, id))) : [];
+  const canStudentSeeTest = useCallback((test: ReadingTest, studentId: string) => canStudentAccessMaterial(test, studentId, students.find((item) => item.id === studentId)), [students]);
+  const assignableTests = useMemo(() => selectedStudents.length ? tests.filter((test) => isPublishedMaterial(test) && selectedStudents.every((id) => canStudentSeeTest(test, id))) : [], [canStudentSeeTest, selectedStudents, tests]);
   const reviewingAssignment = assignments.find((assignment) => assignment.id === reviewingAssignmentId);
   const reviewingTest = tests.find((test) => test.id === reviewingAssignment?.testId);
   const examTests = tests.filter((test) => assignments.some((assignment) => assignment.testId === test.id));
@@ -423,12 +418,12 @@ export function TeacherDashboard({
           {students.map((student) => {
             const progress = progressByStudent[student.id] ?? emptyStudentProgress;
             const assigned = assignments.filter((assignment) => assignment.studentId === student.id);
-            const availableTests = tests.filter((test) => test.status !== "draft" && test.kind !== "exam" && !test.timedExam && canStudentSeeTest(test, student.id));
+            const availableTests = tests.filter((test) => isPublishedMaterial(test) && test.kind !== "exam" && !test.timedExam && canStudentSeeTest(test, student.id));
             const finishedCount = progress.read.length + progress.testsDone.length;
             const completion = Math.min(100, Math.round(finishedCount / Math.max(1, 13 + availableTests.length) * 100));
             const startedTests = availableTests.filter((test) => progress.testsStarted.includes(test.id) && !progress.testsDone.includes(test.id));
             const assignedForStudent = assigned.map((assignment) => ({ assignment, test: tests.find((test) => test.id === assignment.testId) })).filter((item): item is { assignment: ExamAssignment; test: ReadingTest } => Boolean(item.test));
-            const flashcardTests = tests.filter((test) => test.status !== "draft" && test.flashcards?.length && canStudentSeeTest(test, student.id));
+            const flashcardTests = tests.filter((test) => isPublishedMaterial(test) && test.flashcards?.length && canStudentSeeTest(test, student.id));
             const knownFlashcards = flashcardTests.reduce((count, test) => count + (flashcardProgress[student.id]?.[test.id]?.length ?? 0), 0);
             const totalFlashcards = flashcardTests.reduce((count, test) => count + (test.flashcards?.length ?? 0), 0);
             const expanded = expandedStudentId === student.id;
