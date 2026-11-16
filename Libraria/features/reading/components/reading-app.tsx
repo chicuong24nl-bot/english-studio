@@ -477,14 +477,7 @@ export function ReadingApp() {
     window.history[replace ? "replaceState" : "pushState"]({}, "", target);
     restoreAppRoute();
   };
-  const openSettings = () => {
-    const returnTo = window.location.pathname + window.location.search;
-    navigateToPath(`${teacherMode ? "/teacher/style" : "/settings"}?returnTo=${encodeURIComponent(returnTo)}`);
-  };
-  const closeSettings = () => {
-    const returnTo = new URLSearchParams(window.location.search).get("returnTo") || "/library";
-    navigateToPath(returnTo);
-  };
+  const closeSettings = () => setSettingsOpen(false);
   const currentTeacherTab = (() => {
     const segment = typeof window === "undefined" ? "" : window.location.pathname.split("/").filter(Boolean)[1] ?? "";
     return ({ students: "students", materials: "materials", teach: "teach", exams: "exams", settings: "settings" } as Record<string, TeacherTab>)[segment] ?? "students";
@@ -496,6 +489,21 @@ export function ReadingApp() {
     window.addEventListener("popstate", restoreFromUrl);
     return () => window.removeEventListener("popstate", restoreFromUrl);
   }, [localDataReady, restoreAppRoute]);
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSettingsOpen(false);
+    };
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (event.target instanceof Element && !event.target.closest("[data-settings-popover]")) setSettingsOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+    };
+  }, [settingsOpen]);
   useEffect(() => {
     if (!activeExamId) return;
     const assignment = assignments.find((item) => item.id === activeExamId);
@@ -784,12 +792,12 @@ export function ReadingApp() {
   };
 
   const Settings = (
-    <div className="relative">
-      <button onClick={() => settingsOpen ? closeSettings() : openSettings()} aria-expanded={settingsOpen} className="inline-flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-bold transition hover:shadow-sm" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}>
+    <div className="relative" data-settings-popover>
+      <button type="button" onClick={() => setSettingsOpen((open) => !open)} aria-haspopup="dialog" aria-expanded={settingsOpen} className="inline-flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-bold transition hover:shadow-sm" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}>
         <Settings2 size={17} /> Settings <ChevronDown size={15} />
       </button>
       <AnimatePresence>
-      {settingsOpen && <motion.div key="reading-settings" initial={reduceMotion ? false : { opacity: 0, y: -8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduceMotion ? undefined : { opacity: 0, y: -5, scale: 0.98 }} transition={{ type: "spring", stiffness: 420, damping: 32 }} className="absolute right-0 top-14 z-20 max-h-[calc(100dvh-6rem)] w-[min(340px,calc(100vw-2rem))] overflow-y-auto overscroll-contain rounded-2xl border p-5 shadow-xl" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}>
+      {settingsOpen && <motion.div role="dialog" aria-label={teacherMode ? "Display settings" : "Reading settings"} key="reading-settings" initial={reduceMotion ? false : { opacity: 0, y: -8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduceMotion ? undefined : { opacity: 0, y: -5, scale: 0.98 }} transition={{ type: "spring", stiffness: 420, damping: 32 }} className="absolute right-0 top-14 z-20 max-h-[calc(100dvh-6rem)] w-[min(340px,calc(100vw-2rem))] overflow-y-auto overscroll-contain rounded-2xl border p-5 shadow-xl" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}>
         <div className="mb-4 flex items-center justify-between">
           <div><p className="font-extrabold">{teacherMode ? "Display settings" : "Reading settings"}</p><p className="text-xs" style={{ color: theme.muted }}>{teacherMode ? "Choose the look and reading comfort for the app" : "Make the page comfortable for you"}</p></div>
           <button onClick={closeSettings} aria-label="Close settings" className="rounded-full p-2 hover:bg-black/5"><X size={17} /></button>
