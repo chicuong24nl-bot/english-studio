@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { ArrowLeft, BookOpen, LockKeyhole } from "lucide-react";
+import { accessibleAccentForeground, accessibleAccentText } from "@/features/reading/components/ui-types";
 
 type Theme = { surface: string; page: string; ink: string; muted: string; border: string; accent: string; onAccent: string };
 
@@ -54,8 +55,8 @@ export function TeacherLoginGate({ theme, onCancel, onAuthenticated }: { theme: 
     <main className="mx-auto flex min-h-[70vh] w-full max-w-xl items-center justify-center py-10">
       <section className="w-full rounded-3xl border p-6 shadow-sm sm:p-9" style={{ borderColor: theme.border, background: theme.surface, color: theme.ink }}>
         <button type="button" onClick={onCancel} className="mb-8 inline-flex min-h-10 items-center gap-2 rounded-full px-3 text-sm font-semibold" style={{ color: theme.muted }}><ArrowLeft size={16} />Back to student view</button>
-        <div className="mb-6 grid h-12 w-12 place-items-center rounded-2xl" style={{ background: theme.accent, color: theme.onAccent }}><BookOpen size={22} /></div>
-        <p className="text-xs font-bold uppercase tracking-[.16em]" style={{ color: theme.accent }}>Teacher workspace</p>
+        <div className="mb-6 grid h-12 w-12 place-items-center rounded-2xl" style={{ background: theme.accent, color: accessibleAccentForeground(theme) }}><BookOpen size={22} /></div>
+        <p className="text-xs font-bold uppercase tracking-[.16em]" style={{ color: accessibleAccentText(theme) }}>Teacher workspace</p>
         <h1 className="mt-2 font-serif text-3xl font-semibold">Sign in to manage materials</h1>
         <p className="mt-2 text-sm leading-6" style={{ color: theme.muted }}>Draft and unpublished materials stay out of the student reading list. Publish them from the teacher Materials tab when they’re ready.</p>
 
@@ -77,7 +78,7 @@ export function TeacherLoginGate({ theme, onCancel, onAuthenticated }: { theme: 
             </>
           )}
           {notice && configured !== false && <p role="alert" className="text-sm text-red-700">{notice}</p>}
-          {configured === true && <button disabled={busy || !email || !password} type="submit" className="inline-flex min-h-12 w-full items-center justify-center rounded-full px-5 text-sm font-bold disabled:opacity-50" style={{ background: theme.accent, color: theme.onAccent }}>{busy ? "Signing in…" : "Sign in"}</button>}
+          {configured === true && <button disabled={busy || !email || !password} type="submit" className="inline-flex min-h-12 w-full items-center justify-center rounded-full px-5 text-sm font-bold disabled:opacity-50" style={{ background: theme.accent, color: accessibleAccentForeground(theme) }}>{busy ? "Signing in…" : "Sign in"}</button>}
           {configured === false && notice && <p role="alert" className="text-sm text-amber-800">{notice}</p>}
         </form>
         {configured !== false && <p className="mt-5 text-xs" style={{ color: theme.muted }}>Teacher accounts are created by your Libraria administrator. Session expires after 12 hours.</p>}

@@ -5,6 +5,7 @@ import { Clipboard, Eye, Users } from "lucide-react";
 import type { ReadingTest } from "@/features/reading/data/reading-tests";
 import type { ExamAssignment, StudentProfile } from "@/features/classroom/data-model";
 import { isPublishedMaterial } from "@/features/reading/data/material-policy";
+import { accessibleAccentText } from "@/features/reading/components/ui-types";
 
 type Theme = { page: string; surface: string; ink: string; muted: string; border: string; accent: string; onAccent: string };
 
@@ -32,10 +33,10 @@ export function IELTSTestFollowUp({ tests, assignments, students, theme, onRevie
     }
   };
   const card = { borderColor: theme.border, background: theme.surface };
-  const buttonStyle = { borderColor: theme.border, color: theme.accent };
+  const buttonStyle = { borderColor: theme.border, color: accessibleAccentText(theme) };
 
   return <section className="rounded-3xl border p-5 sm:p-7" style={card}>
-    <div className="mb-5 flex items-center gap-2"><Users size={18} style={{ color: theme.accent }} /><div><h2 className="font-serif text-2xl font-semibold">IELTS test follow-up</h2><p className="mt-1 text-sm" style={{ color: theme.muted }}>Preview, track submissions, and review scores for each test.</p></div></div>
+    <div className="mb-5 flex items-center gap-2"><Users size={18} style={{ color: accessibleAccentText(theme) }} /><div><h2 className="font-serif text-2xl font-semibold">IELTS test follow-up</h2><p className="mt-1 text-sm" style={{ color: theme.muted }}>Preview, track submissions, and review scores for each test.</p></div></div>
     <div className="space-y-3">{ieltsTests.map((test) => {
       const submissions = assignments.filter((assignment) => assignment.testId === test.id);
       const started = submissions.filter((assignment) => Boolean(assignment.startedAt || assignment.completedAt));

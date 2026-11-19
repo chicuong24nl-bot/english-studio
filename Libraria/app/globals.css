@@ -107,7 +107,12 @@ body,
 
 /* Six deliberately different visual grammars; palette tokens are selected in the app theme map. */
 .libaria-app :is(button, a, input, textarea, select):focus-visible { outline: 3px solid var(--style-focus, #2563eb); outline-offset: 3px; }
-.libaria-app :is(article, section, button, input, textarea, select, .rounded-xl, .rounded-2xl, .rounded-3xl) { transition-property: background-color, color, border-color, border-radius, box-shadow, transform; transition-duration: 220ms; }
+.libaria-app :is(button, a, input, textarea, select) { transition-property: background-color, color, border-color, box-shadow, transform; transition-duration: 160ms; }
+.libaria-app :is(article, section) { transition: border-color 180ms ease, box-shadow 180ms ease; }
+.libaria-app :where(h1, h2, h3) { text-wrap: balance; }
+.libaria-app :where(p) { text-wrap: pretty; }
+.libaria-app :where(button, a) { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.libaria-app :where(button:disabled, [aria-disabled="true"]) { cursor: not-allowed; }
 @media (prefers-reduced-motion: reduce) {
   .libaria-app :is(article, section, button, input, textarea, select, .rounded-xl, .rounded-2xl, .rounded-3xl) { transition-duration: 0ms !important; }
 }
@@ -267,15 +272,37 @@ body,
 /* Small-screen comfort: preserve each theme while keeping controls and content in viewport. */
 @media (max-width: 640px) {
   .libaria-app { overflow-x: clip; }
+  .libaria-app main { min-width: 0; scroll-margin-top: 5rem; }
   .libaria-app header { gap: .5rem; }
   .libaria-app header > div:first-child { min-width: 0; gap: .35rem; }
   .libaria-app header > div:first-child > span { max-width: 38vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .libaria-app header button { min-height: 42px; }
+  .libaria-app header button { min-height: 44px; }
   .libaria-app header button span.max-w-32 { max-width: 5.5rem; }
   .libaria-app .reading-hero { padding: 1.1rem !important; }
   .libaria-app .exam-card { min-width: 0; }
-  .libaria-app :is(input, select, textarea) { max-width: 100%; }
+  .libaria-app :is(input, select, textarea) { max-width: 100%; font-size: 16px; }
+  .libaria-app button:not([aria-label^="Select paragraph"]):not([aria-label^="Select a"]):not([aria-label^="Select True"]):not([aria-label^="Select False"]):not([aria-label^="Select Not Given"]) { min-height: 44px; }
+  .libaria-app .answer-navigation-dot { display: grid; width: 44px; height: 44px; min-height: 44px; place-items: center; padding: 0; background: transparent !important; }
+  .libaria-app .answer-navigation-dot::before { width: 10px; height: 10px; border-radius: 9999px; background: var(--border-color); content: ""; }
+  .libaria-app .answer-navigation-dot[aria-pressed="true"]::before { background: var(--bg-accent); transform: scale(1.25); }
+  .libaria-app label:has(> input[type="checkbox"]) { min-height: 44px; }
   .libaria-app [role="dialog"] { padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom)); }
+}
+
+/* Quiet, layered depth across buttons and tactile cards. */
+.libaria-app[data-design-style][data-shadow-mode] :is(button:not(:disabled), [data-tactile="card"], [data-tactile="control"]) {
+  box-shadow:
+    0 1px 1px color-mix(in srgb, var(--text-main) 3%, transparent),
+    0 3px 7px color-mix(in srgb, var(--text-main) 3%, transparent),
+    0 8px 18px color-mix(in srgb, var(--text-main) 2.5%, transparent),
+    0 18px 36px color-mix(in srgb, var(--text-main) 2%, transparent) !important;
+}
+.libaria-app[data-design-style][data-shadow-mode] :is(button:not(:disabled), [data-tactile="card"], [data-tactile="control"]):hover {
+  box-shadow:
+    0 2px 3px color-mix(in srgb, var(--text-main) 4%, transparent),
+    0 5px 10px color-mix(in srgb, var(--text-main) 4%, transparent),
+    0 12px 24px color-mix(in srgb, var(--text-main) 3%, transparent),
+    0 22px 42px color-mix(in srgb, var(--text-main) 2.5%, transparent) !important;
 }
 @media (max-width: 379px) {
   .libaria-app header > div:nth-child(2) { gap: .35rem; }
